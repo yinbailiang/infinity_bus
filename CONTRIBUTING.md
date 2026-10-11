@@ -5,8 +5,8 @@
 > 本项目唯一合法的 Python 工具链是 [uv](https://docs.astral.sh/uv/)。
 
 ```bash
-git clone https://github.com/yinbailiang/event_bus.git
-cd event_bus
+git clone https://github.com/yinbailiang/infinity_bus.git
+cd infinity_bus
 uv sync --extra dev
 uv run pre-commit install
 ```

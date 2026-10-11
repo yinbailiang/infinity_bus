@@ -1,17 +1,17 @@
 # InfinityBus — Async Event Bus
 
-[![Test](https://github.com/yinbailiang/event_bus/actions/workflows/test.yml/badge.svg)](https://github.com/yinbailiang/event_bus/actions/workflows/test.yml)
+[![Test](https://github.com/yinbailiang/infinity_bus/actions/workflows/test.yml/badge.svg)](https://github.com/yinbailiang/infinity_bus/actions/workflows/test.yml)
 [![Coverage](https://img.shields.io/badge/coverage-90%25+-brightgreen)](ENGINEERING.md)
 [![docstring](docs/res/interrogate_badge.svg)](ENGINEERING.md)
 [![Pyright](https://img.shields.io/badge/pyright-strict-blue)](ENGINEERING.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 [![PyPI Version](https://img.shields.io/pypi/v/infinity_bus)](https://pypi.org/project/infinity_bus/)
 [![Supported Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://pypi.org/project/infinity_bus/)
-[![Docs](https://img.shields.io/badge/docs-online-blue)](https://yinbailiang.github.io/event_bus/)
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://yinbailiang.github.io/infinity_bus/)
 
 **Strongly-typed, extensible async event bus — middleware pipeline + advanced templates.**
 
-> 📖 [中文版](README_zh.md) · 🌐 [Documentation site](https://yinbailiang.github.io/event_bus/)
+> 📖 [中文版](README_zh.md) · 🌐 [Documentation site](https://yinbailiang.github.io/infinity_bus/)
 
 ## 📑 Table of Contents
 
@@ -74,7 +74,7 @@
 > **Choose PyPubSub when**: you don't use asyncio; you need very broad Python version compatibility (3.7–3.14); you prefer traditional topic hierarchy string matching.
 >
 > Full commits:
-> · [InfinityBus `1bae1f0`](https://github.com/yinbailiang/event_bus/commit/1bae1f0)
+> · [InfinityBus `1bae1f0`](https://github.com/yinbailiang/infinity_bus/commit/1bae1f0)
 > · [bubus `7c09342`](https://github.com/browser-use/bubus/commit/7c09342)
 > · [pyee `5157de2`](https://github.com/jfhbrook/pyee/commit/5157de2) (no coverage in official CI; manually measured via `pytest-cov`)
 > · [PyPubSub `4ec2c47`](https://github.com/schollii/pypubsub/commit/4ec2c47)
@@ -110,8 +110,8 @@ uv add infinity_bus --extra templates
 Or install from source:
 
 ```bash
-git clone https://github.com/yinbailiang/event_bus.git
-cd event_bus
+git clone https://github.com/yinbailiang/infinity_bus.git
+cd infinity_bus
 uv sync --extra dev
 ```
 
@@ -268,7 +268,7 @@ asyncio.run(main())
 
 ## 📚 Documentation
 
-> 🌐 **Online documentation**: **https://yinbailiang.github.io/event_bus/** — bilingual (中文 / English), full-text search, dark mode.
+> 🌐 **Online documentation**: **https://yinbailiang.github.io/infinity_bus/** — bilingual (中文 / English), full-text search, dark mode.
 
 | Document | Content |
 | - | - |
@@ -284,8 +284,8 @@ asyncio.run(main())
 
 ```bash
 # Clone and install test dependencies
-git clone https://github.com/yinbailiang/event_bus.git
-cd event_bus
+git clone https://github.com/yinbailiang/infinity_bus.git
+cd infinity_bus
 pip install -e ".[test]"
 
 # Run all tests
@@ -299,8 +299,8 @@ pytest tests/templates/ -v
 
 ```bash
 # Clone and sync test dependencies
-git clone https://github.com/yinbailiang/event_bus.git
-cd event_bus
+git clone https://github.com/yinbailiang/infinity_bus.git
+cd infinity_bus
 uv sync --extra test
 
 # Run all tests
@@ -317,8 +317,8 @@ uv run pytest tests/templates/ -v
 
 ```bash
 # 1. Clone and sync all dependencies (auto-creates venv)
-git clone https://github.com/yinbailiang/event_bus.git
-cd event_bus
+git clone https://github.com/yinbailiang/infinity_bus.git
+cd infinity_bus
 uv sync --extra dev
 
 # 2. Install pre-commit hooks

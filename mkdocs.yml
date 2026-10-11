@@ -1,8 +1,8 @@
 site_name: InfinityBus
-site_url: https://yinbailiang.github.io/event_bus/
+site_url: https://yinbailiang.github.io/infinity_bus/
 site_description: 强类型、可扩展的异步事件总线 — 中间件管道 + 高级模板
-repo_url: https://github.com/yinbailiang/event_bus
-repo_name: yinbailiang/event_bus
+repo_url: https://github.com/yinbailiang/infinity_bus
+repo_name: yinbailiang/infinity_bus
 edit_uri: edit/master/docs/
 copyright: MIT License
 

@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/yinbailiang/event_bus"
+Repository = "https://github.com/yinbailiang/infinity_bus"
 
 [project.optional-dependencies]
 templates = [

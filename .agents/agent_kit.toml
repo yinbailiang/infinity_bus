@@ -6,7 +6,7 @@ name = "InfinityBus"
 summary = "强类型、可扩展的异步事件总线（Python 3.12+）"
 package = "infinity_bus"
 src_dir = "src/infinity_bus"
-repo_url = "https://github.com/yinbailiang/event_bus"
+repo_url = "https://github.com/yinbailiang/infinity_bus"
 pypi_name = "infinity_bus"
 extra_sources = [
   "ENGINEERING.md :: 工程质量标准与指标",

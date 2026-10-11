@@ -20,7 +20,7 @@ uv add infinity_bus --extra templates
 
 - [Core Overview](infinity_bus.md) — architecture and component map
 - [Templates Overview](templates/templates.md) — the advanced templates
-- [README (Quick Start)](https://github.com/yinbailiang/event_bus/blob/master/README.md)
+- [README (Quick Start)](https://github.com/yinbailiang/infinity_bus/blob/master/README.md)
 
 ## Minimal Example
 

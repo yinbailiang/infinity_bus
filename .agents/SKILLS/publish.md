@@ -51,7 +51,7 @@
    git push origin v<新版本号>
    ```
 
-7. **监控 CI/CD** — 前往 https://github.com/yinbailiang/event_bus/actions 查看执行状态。
+7. **监控 CI/CD** — 前往 https://github.com/yinbailiang/infinity_bus/actions 查看执行状态。
 
 8. **验证发布**
 

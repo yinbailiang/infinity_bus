@@ -18,7 +18,7 @@ uv add infinity_bus --extra templates
 
 - [核心总览](infinity_bus.md) — 架构与组件关系
 - [高级模板总览](templates/templates.md) — 高级模板一览
-- [README（快速开始）](https://github.com/yinbailiang/event_bus/blob/master/README_zh.md)
+- [README（快速开始）](https://github.com/yinbailiang/infinity_bus/blob/master/README_zh.md)
 
 ## 最简示例
 

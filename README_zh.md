@@ -1,17 +1,17 @@
 # InfinityBus — 异步事件总线
 
-[![Test](https://github.com/yinbailiang/event_bus/actions/workflows/test.yml/badge.svg)](https://github.com/yinbailiang/event_bus/actions/workflows/test.yml)
+[![Test](https://github.com/yinbailiang/infinity_bus/actions/workflows/test.yml/badge.svg)](https://github.com/yinbailiang/infinity_bus/actions/workflows/test.yml)
 [![Coverage](https://img.shields.io/badge/coverage-90%25+-brightgreen)](ENGINEERING.md)
 [![docstring](docs/res/interrogate_badge.svg)](ENGINEERING.md)
 [![Pyright](https://img.shields.io/badge/pyright-strict-blue)](ENGINEERING.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 [![PyPI Version](https://img.shields.io/pypi/v/infinity_bus)](https://pypi.org/project/infinity_bus/)
 [![Supported Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://pypi.org/project/infinity_bus/)
-[![Docs](https://img.shields.io/badge/docs-online-blue)](https://yinbailiang.github.io/event_bus/)
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://yinbailiang.github.io/infinity_bus/)
 
 **强类型、可扩展的异步事件总线——中间件管道 + 高级模板。**
 
-> 📖 [英文版](README.md) · 🌐 [在线文档](https://yinbailiang.github.io/event_bus/)
+> 📖 [英文版](README.md) · 🌐 [在线文档](https://yinbailiang.github.io/infinity_bus/)
 
 ## 📑 目录
 
@@ -74,7 +74,7 @@
 > **选择 PyPubSub 的理由**：你不使用 asyncio；你需要极宽的 Python 版本兼容（3.7–3.14）；你偏好传统的主题层级字符串匹配。
 >
 > 完整 commit：
-> · [InfinityBus `1bae1f0`](https://github.com/yinbailiang/event_bus/commit/1bae1f0)
+> · [InfinityBus `1bae1f0`](https://github.com/yinbailiang/infinity_bus/commit/1bae1f0)
 > · [bubus `7c09342`](https://github.com/browser-use/bubus/commit/7c09342)
 > · [pyee `5157de2`](https://github.com/jfhbrook/pyee/commit/5157de2)（官方 CI 无覆盖率，此处为手动 `pytest-cov` 测量）
 > · [PyPubSub `4ec2c47`](https://github.com/schollii/pypubsub/commit/4ec2c47)
@@ -110,8 +110,8 @@ uv add infinity_bus --extra templates
 或从源码安装：
 
 ```bash
-git clone https://github.com/yinbailiang/event_bus.git
-cd event_bus
+git clone https://github.com/yinbailiang/infinity_bus.git
+cd infinity_bus
 uv sync --extra dev
 ```
 
@@ -266,7 +266,7 @@ asyncio.run(main())
 
 ## 📚 文档
 
-> 🌐 **在线文档**：**https://yinbailiang.github.io/event_bus/** —— 中英双语、全文搜索、暗色模式。
+> 🌐 **在线文档**：**https://yinbailiang.github.io/infinity_bus/** —— 中英双语、全文搜索、暗色模式。
 
 | 文档 | 内容 |
 | - | - |
@@ -282,8 +282,8 @@ asyncio.run(main())
 
 ```bash
 # 克隆并安装测试依赖
-git clone https://github.com/yinbailiang/event_bus.git
-cd event_bus
+git clone https://github.com/yinbailiang/infinity_bus.git
+cd infinity_bus
 pip install -e ".[test]"
 
 # 运行全部测试
@@ -297,8 +297,8 @@ pytest tests/templates/ -v
 
 ```bash
 # 克隆并同步测试依赖
-git clone https://github.com/yinbailiang/event_bus.git
-cd event_bus
+git clone https://github.com/yinbailiang/infinity_bus.git
+cd infinity_bus
 uv sync --extra test
 
 # 运行全部测试
@@ -315,8 +315,8 @@ uv run pytest tests/templates/ -v
 
 ```bash
 # 1. 克隆并同步全部依赖（自动创建 venv）
-git clone https://github.com/yinbailiang/event_bus.git
-cd event_bus
+git clone https://github.com/yinbailiang/infinity_bus.git
+cd infinity_bus
 uv sync --extra dev
 
 # 2. 安装 pre-commit 门禁
