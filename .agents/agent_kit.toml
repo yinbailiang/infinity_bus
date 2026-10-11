@@ -1,0 +1,29 @@
+# agent_kit 项目配置（由 agent-kit 生成；可手工微调，改动在下次 update 时生效）
+kit_version = 1
+
+[project]
+name = "InfinityBus"
+summary = "强类型、可扩展的异步事件总线（Python 3.12+）"
+package = "event_bus"
+src_dir = "src/event_bus"
+repo_url = "https://github.com/yinbailiang/event_bus"
+pypi_name = "infinity_bus"
+extra_sources = [
+  "ENGINEERING.md :: 工程质量标准与指标",
+  "CONTRIBUTING.md :: 贡献流程与提交规范",
+  "docs/ :: 公开 API 用法与架构说明",
+]
+
+[toolchain]
+setup = "uv sync --extra dev && uv run pre-commit install"
+lint = "uv run ruff check ."
+format = "uv run ruff format ."
+typecheck = "uv run pyright"
+test = "uv run pytest --cov=event_bus --cov-fail-under=90 -q"
+extras = [
+  "uv run interrogate src/event_bus/ :: 公开 API docstring 覆盖率检查",
+  "uv run agent-kit update --check :: 规则漂移检查（AGENT.md 与 .agents/ 须与模板一致）",
+]
+
+[skills]
+enabled = ["modify-core-api", "pre-commit-check", "write-tests", "write-docs", "write-skill", "publish"]

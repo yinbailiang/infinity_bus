@@ -14,8 +14,7 @@
 - 首次设置开发环境：
 
   ```bash
-  uv sync --extra dev
-  uv run pre-commit install
+  uv sync --extra dev && uv run pre-commit install
   ```
 
 ## 信息源
@@ -25,42 +24,43 @@
 | 信息 | 来源 |
 | --- | --- |
 | 项目元数据、依赖、工具配置 | `pyproject.toml` |
-| 工程质量标准与指标 | `ENGINEERING.md` |
-| 贡献流程与提交规范 | `CONTRIBUTING.md` |
-| 公开 API 用法与架构说明 | `docs/` |
+| 对外说明与用法 | `README.md` |
 | 实际代码结构与实现 | `src/event_bus/` |
-| 测试范例与共享 fixture | `tests/conftest.py` |
+| 测试范例与共享 fixture | `tests/` |
+| `ENGINEERING.md` | 工程质量标准与指标 |
+| `CONTRIBUTING.md` | 贡献流程与提交规范 |
+| `docs/` | 公开 API 用法与架构说明 |
 
 ## 变更铁律
 
 **每一项代码变更必须依次完成以下三步，缺一不可：**
 
-1. **改代码** — 修改 `src/` 中的实现
+1. **改代码** — 修改 `src/event_bus/` 中的实现
 2. **写测试** — 在 `tests/` 镜像路径下编写对应测试，覆盖新功能/边界/异常
-3. **同步文档** — 更新 `docs/` 中对应文档、docstring、`__all__` 导出
+3. **同步文档** — 更新 docstring、README 与 `__all__` 导出
 
-> 提交前运行 `pre-commit-check` SKILL 验证全部通过。
+> 提交前运行 pre-commit-check 技能验证全部通过。
 
 ## 不可妥协的原则
 
 以下原则为项目根基，任何情况下不得违反：
 
-1. **Pyright strict 零遮蔽** — `src/` 目录下绝对禁止 `# type: ignore` 或 `# pyright: ignore` 注释
+1. **Pyright strict 零遮蔽** — `src/event_bus/` 目录下绝对禁止 `# type: ignore` 或 `# pyright: ignore` 注释
 2. **完整类型注解** — 所有公开 API 必须有完整参数、返回值、泛型注解
 3. **镜像测试** — `tests/` 目录结构与 `src/event_bus/` 一一对应
 
 ## 代码约定
 
-以下约定应遵守，具体参数以 `pyproject.toml` 和 `ENGINEERING.md` 为准：
+以下约定应遵守，具体参数以 `pyproject.toml` 为准：
 
-- Pydantic 负载模型用 `Field(description=...)` 注释字段
-- 日志通过 `logging.getLogger(__name__)`，内部细节 `debug`，异常 `warning`
+- 描述目标时给出名字，模块，路径，而不是行号。
+- 日志通过 `logging.getLogger(__name__)` 获取；内部细节用 `debug`，异常用 `warning`
 - 内部状态通过 `@property` 暴露，避免直接访问私有字段
-- **注释只解释"为什么"，不解释"做什么"**——一眼能看懂的代码逻辑不写注释
+- **注释只解释「为什么」，不解释「做什么」**——一眼能看懂的代码逻辑不写注释
 - **docstring 只描述公开行为**（用途、参数、返回值、异常），不描述内部实现流程
-- **所有python命令必须通过 `uv run` 执行**（如 `uv run pytest`、`uv run pyright src/`）。禁止裸调python命令——项目不依赖全局 Python 环境，裸调会因 venv 未激活而失败
-- 工具链：ruff（lint + format）、pyright（类型检查）、interrogate（docstring 覆盖）、pytest（测试 + 覆盖率）
-- 提交消息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)，详见 `ENGINEERING.md#提交规范`
+- **所有 Python 命令必须通过 `uv run` 执行**（如 `uv run pytest`）；禁止裸调 Python 命令
+- 工具链：ruff（lint + format）、pyright（类型检查）、pytest（测试）
+- 提交消息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)
 
 ---
 
@@ -72,6 +72,8 @@
 | 任务 | SKILL 文件 |
 | --- | --- |
 | 修改核心 API | [modify-core-api.md](SKILLS/modify-core-api.md) |
+| 审查前检查 | [pre-commit-check.md](SKILLS/pre-commit-check.md) |
 | 编写测试 | [write-tests.md](SKILLS/write-tests.md) |
 | 编写文档 | [write-docs.md](SKILLS/write-docs.md) |
-| 代码审查前检查 | [pre-commit-check.md](SKILLS/pre-commit-check.md) |
+| 创建通用技能 | [write-skill.md](SKILLS/write-skill.md) |
+| 项目发布 | [publish.md](SKILLS/publish.md) |

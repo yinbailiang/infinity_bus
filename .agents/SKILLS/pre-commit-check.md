@@ -4,12 +4,14 @@
 
 ## 步骤
 
-1. `uv run ruff check src/` — lint 检查
-2. `uv run ruff format --check src/` — 格式检查
-3. **零遮蔽检查**：`src/` 目录下不得出现任何 `# type:` 或 `# pyright` 注释
-   - Windows: `Select-String -Path src\**\*.py -Pattern "# type:|# pyright"` 确认无匹配
-   - Unix: `grep -r "# type:\|# pyright" src/` 确认无输出
-4. `uv run pyright src/` — 类型检查（必须零错误）
-5. `uv run interrogate src/event_bus/` — docstring 覆盖率
-6. `uv run pytest tests/ --cov=event_bus --cov-report=term-missing -q --tb=line` — 测试+覆盖率
-7. 如有问题，修复后重新全量运行。
+1. `uv run ruff check .` — lint 检查
+2. `uv run ruff format .` — 格式化（仅检查不写入时，为命令追加 `--check`）
+3. **零遮蔽检查** — `src/event_bus/` 下不得出现任何 `# type:` 或 `# pyright` 注释
+   - Windows: `Select-String -Path src\event_bus\**\*.py -Pattern "# type:|# pyright"` 应无匹配
+   - Unix: `grep -r "# type:\|# pyright" src/event_bus/` 应无输出
+4. `uv run pyright` — 类型检查（必须零错误）
+5. `uv run pytest --cov=event_bus --cov-fail-under=90 -q` — 全量测试
+6. `uv run interrogate src/event_bus/` — 公开 API docstring 覆盖率检查
+7. `uv run agent-kit update --check` — 规则漂移检查（AGENT.md 与 .agents/ 须与模板一致）
+
+> 如有问题，修复后从第 1 步重新全量运行。

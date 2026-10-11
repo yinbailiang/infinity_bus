@@ -4,11 +4,11 @@
 
 ## 核心原则
 
-技能是**通用的任务指引**，描述"做什么、怎么做"，与任何特定 Agent 前端无关。
+技能是**通用的任务指引**，描述「做什么、怎么做」，与任何特定 Agent 前端无关。
 
 - **禁止** 使用 `---` YAML 头（那是 VS Code Copilot 专用格式）
 - **禁止** 出现 `user-invocable`、`argument-hint` 等前端专属字段
-- **禁止** 引用特定 Agent 工具名称（如"使用 xxx 工具"）
+- **禁止** 引用特定 Agent 工具名称（如「使用 xxx 工具」）
 - **应当** 只描述流程、步骤、规范，任意 AI 助手均可理解和执行
 
 ## 文件规范
@@ -45,10 +45,7 @@
 4. 保持通用性：Linux / Windows / macOS 均可执行
 5. 创建文件后在 `AGENT.md` 的目录树和技能表中注册
 
-## 示例
+## 与 agent_kit 的关系
 
-参考已有技能：
-
-- `pre-commit-check.md` — 步骤型，每步一条命令
-- `publish.md` — 流程型，含概览和注意事项
-- `write-tests.md` — 规范型，规定测试约定
+若项目的静态规则由 agent_kit 统一同步，新增 / 修改技能应改动 agent_kit 的模板目录，
+再运行 `agent-kit update` 分发到各项目；避免直接修改 `.agents/SKILLS/` 造成漂移。
