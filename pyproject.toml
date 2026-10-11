@@ -1,6 +1,6 @@
 [project]
 name = "infinity_bus"
-version = "4.1.0"
+version = "5.0.0"
 description = "Middleware-native async event bus — extensible, type-safe, one dependency. "
 readme = "README.md"
 license = { text = "MIT" }
