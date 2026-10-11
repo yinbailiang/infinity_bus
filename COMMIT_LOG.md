@@ -1,6 +1,6 @@
 # Commit Log — `infinity_bus`
 
-> 共 **130** 个提交 · 24 个版本标签 · 2026-06-07 ~ 2026-10-03
+> 共 **133** 个提交 · 25 个版本标签 · 2026-06-07 ~ 2026-10-12
 
 ## 版本标签
 
@@ -34,6 +34,22 @@
 ---
 
 ## 全部提交
+
+### 2026-10-12
+
+- **`19b750b`** `chore: bump version to 5.0.0`
+  - Version bumped 4.1.0 -> 5.0.0 (major: import package renamed event_bus -> infinity_bus; no compatibility alias)
+
+- **`cf7afe0`** `refactor!: rename the import package to infinity_bus`
+  - src/event_bus/ -> src/infinity_bus/; imports, tests, docs, tooling and agent rules updated (123 files)
+  - System events renamed to infinity_bus.__shutdown__ / infinity_bus.__task_error__; metrics prefix and RabbitMQ exchange renamed to infinity_bus
+  - docs: event_bus.md -> infinity_bus.md (EN/ZH); READMEs gain a v4 -> v5 migration section
+  - Verified: 391 passed · 94% coverage · pyright 0 · pre-commit 15 hooks · mkdocs --strict · wheel top-level = infinity_bus only
+
+- **`9d5a336`** `chore: adopt packaged infinity-agent-kit with pre-commit drift check`
+  - dev deps: infinity-agent-kit>=1.0.0; new .agents/agent_kit.toml project config (6 skills; toolchain; extras)
+  - agent-kit-check hook keeps AGENT.md and .agents/ in sync with the central template (`uv run agent-kit update`)
+  - Static agent rules re-rendered from the packaged template
 
 ### 2026-10-03
 

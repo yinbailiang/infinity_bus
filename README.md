@@ -63,7 +63,7 @@
 | Logging & Auditing | ✅ JSONL + SQLite (middleware) | ✅ built-in JSONL WAL logging | ❌ no built-in | ⚠️ debug tracing |
 | Test Coverage | ✅ 94% (391 tests) | ✅ 83% (138 tests) | ✅ 94% (43 tests) | ✅ 86% (167 tests) |
 | Python Version | 3.12+ | 3.11+ | 3.12+ | 3.7–3.14 |
-| Baseline Version | v4.1.0 `75a4f03` | v1.5.6 `7c09342` | v13.0.1 `5157de2` | v4.0.7 `4ec2c47` |
+| Baseline Version | v5.0.0 `19b750b` | v1.5.6 `7c09342` | v13.0.1 `5157de2` | v4.0.7 `4ec2c47` |
 
 > **Choose InfinityBus when**: you need a middleware-native architecture — hot-reloadable onion pipeline with 8 built-in middlewares (logging, metrics, rate-limit, transform, block, recursion guard, forwarding); you run pyright strict across the entire codebase with literally zero `# type: ignore` in any production code; you want full production-grade features (backpressure, graceful shutdown, regex subscriptions, Pydantic payload validation) with a single core dependency.
 >

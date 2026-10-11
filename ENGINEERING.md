@@ -63,7 +63,7 @@ ignore-nested-functions = true
 | - | - |
 | 公开 API docstring 覆盖 | **91.6%** |
 | 最低阈值 | 60% |
-| 文档文件 | 55 篇 `.md` |
+| 文档文件 | 58 篇 `.md` |
 
 ---
 
@@ -72,7 +72,7 @@ ignore-nested-functions = true
 ### 覆盖率
 
 ```text
-391 passed · 5 deselected(slow) · 0 failed · 9.4s
+391 passed · 5 deselected(slow) · 0 failed · 9.2s
 总覆盖率: 94%（2157 statements / 128 missed）
 ```
 
