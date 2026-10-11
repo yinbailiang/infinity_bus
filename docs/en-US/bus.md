@@ -69,7 +69,7 @@ other settings live on the queue itself — the bus never knows them; inject
 
 | Method | Description |
 | - | - |
-| `start()` | Starts the event bus: first activates the handler registry (`registry.activate(bus)` — each handler's subscription bundle registers into `bus.router`), then starts the dispatch loop and initializes middleware. **Failure-safe & retryable**: any failure rolls back (cancel dispatch, deactivate handlers, tear down middleware) to a clean not-started state. Idempotent. |
+| `start()` | Starts the event bus: first initializes the middleware chain (each middleware's `on_setup`), then activates the handler registry (`registry.activate(bus)` — each handler's subscription bundle registers into `bus.router`), and finally starts the dispatch loop and enables publishing — **the order mirrors `stop()`'s cleanup**, so messages published during handler activation go through a fully-ready middleware pipeline. **Failure-safe & retryable**: any failure rolls back (cancel dispatch, deactivate handlers, tear down middleware) to a clean not-started state. Idempotent. |
 | `stop()` | Graceful shutdown: publish `__shutdown__` → reject new publishes → drain queue → cancel dispatch → wait for active tasks → deactivate the handler registry (`registry.deactivate()`); handler deactivation failures are logged and summarized. Idempotent. |
 | `async with EventBus(...) as bus:` | Context manager, auto start/stop. `stop()` errors on exit won't mask body exceptions. |
 
@@ -89,7 +89,7 @@ Indicates the event bus's running state. Its value changes over the lifecycle as
 | Phase | `is_running` | Description |
 | - | - | - |
 | After construction, before `start()` | `False` | Bus created but not yet started. |
-| During `start()` | `False` | Dispatch loop being created, not yet marked as running. |
+| During `start()` | `False` | Initializing middleware, activating handlers and creating the dispatch loop; not yet marked as running. |
 | After `start()` completes | **`True`** | Dispatch loop started, actively dispatching events. |
 | During `stop()` | **`True`** | Draining queue, waiting for active tasks to complete. |
 | After `stop()` completes | `False` | All resources released. |
@@ -118,6 +118,7 @@ Indicates whether new events can be published to the bus. Its value changes as f
 | Phase | `is_publishing_enabled` | Description |
 | - | - | - |
 | After construction, before `start()` | `False` | Publishing raises `RuntimeError`. |
+| During `start()` | `False` | Middleware & handler initialization in progress; publishing not yet enabled. |
 | After `start()` completes | **`True`** | Normal publishing allowed. |
 | After `stop()` publishes `__shutdown__` | **`False`** | New events rejected; publishing raises `BusShuttingDown`. |
 | After `stop()` completes | `False` | — |

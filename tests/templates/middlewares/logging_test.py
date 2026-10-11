@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 import tempfile
-from typing import Any, List
+from typing import Any, List, Optional
 
 import pytest
 from conftest import (
@@ -13,7 +13,9 @@ from conftest import (
 from pydantic import BaseModel
 
 from infinity_bus import (
+    Event,
     EventBus,
+    EventHandler,
     EventHandlerRegistry,
     EventRegistry,
     InMemoryEventQueue,
@@ -40,6 +42,41 @@ def _read_lines(path: str) -> List[str]:
 @pytest.fixture
 def chain() -> MiddlewareChain:
     return MiddlewareChain()
+
+
+class _StartupAnnouncerHandler(EventHandler):
+    """在激活阶段创建后台任务、总线开放发布后立即广播消息（模拟处理器启动发布）。"""
+
+    def __init__(self) -> None:
+        super().__init__(subscriptions=[])
+        self._announce_task: Optional[asyncio.Task[None]] = None
+
+    def on_activate(self, bus: EventBus) -> None:
+        super().on_activate(bus)
+        self._announce_task = asyncio.create_task(self._announce(bus))
+
+    async def _announce(self, bus: EventBus) -> None:
+        # 任务首次被调度时发布开关已同步置位（activate 与 enable 之间无挂起点）
+        await bus.proxy('announcer').publish('mw.ping', {'key': 'startup', 'count': 1})
+
+    async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+        pass
+
+
+class _SlowSetupJSONL(JSONLLoggingMiddleware):
+    """放大启动窗口：on_setup 前延迟，用于回归验证启动期发布不丢日志。"""
+
+    async def on_setup(self, bus: EventBus) -> None:
+        await asyncio.sleep(0.05)
+        await super().on_setup(bus)
+
+
+class _SlowSetupSQLite(SQLiteLoggingMiddleware):
+    """同 :class:`_SlowSetupJSONL`，SQLite 版本。"""
+
+    async def on_setup(self, bus: EventBus) -> None:
+        await asyncio.sleep(0.05)
+        await super().on_setup(bus)
 
 
 # ============================================================================
@@ -157,6 +194,38 @@ class TestSQLiteLoggingMiddleware:
         assert len(fallback_lines) >= 1
         record = json.loads(fallback_lines[0])
         assert 'ValueError' in record['error']
+
+    @pytest.mark.asyncio
+    async def test_startup_publish_from_handler_is_logged(
+        self,
+        base_event_registry: EventRegistry,
+        handler_registry: EventHandlerRegistry,
+    ) -> None:
+        """回归：处理器在激活阶段发布的消息必须写入 SQLite——
+        中间件先于处理器初始化，启动窗口内不存在「目标未就绪」竞态。"""
+        fallback_lines: List[str] = []
+        mw = _SlowSetupSQLite(':memory:', fallback=fallback_lines.append)
+        chain = MiddlewareChain()
+        await chain.add(mw)
+
+        ping = SimplePingHandler()
+        handler_registry.register(ping)
+        handler_registry.register(_StartupAnnouncerHandler())
+
+        bus = EventBus(
+            base_event_registry,
+            handler_registry,
+            queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+            middleware_chain=chain,
+        )
+        async with bus:
+            await ping.wait_received(timeout=2.0)
+
+            cursor = await mw._conn.execute('SELECT name FROM event_log')  # pyright: ignore[reportPrivateUsage]
+            rows = await cursor.fetchall()
+            assert any(row['name'] == 'mw.ping' for row in rows)
+
+        assert fallback_lines == []
 
 
 # ============================================================================
@@ -305,3 +374,42 @@ class TestJSONLLoggingMiddleware:
             assert len(fallback_lines) >= 1
             record = json.loads(fallback_lines[0])
             assert 'ValueError' in record['error']
+
+    @pytest.mark.asyncio
+    async def test_startup_publish_from_handler_is_logged(
+        self,
+        base_event_registry: EventRegistry,
+        handler_registry: EventHandlerRegistry,
+    ) -> None:
+        """回归：处理器在激活阶段发布的消息必须写入 JSONL——
+        中间件先于处理器初始化，启动窗口内不存在「目标未就绪」竞态。"""
+        with tempfile.NamedTemporaryFile(suffix='.jsonl', delete=False) as f:
+            file_path = f.name
+
+        try:
+            fallback_lines: List[str] = []
+            mw = _SlowSetupJSONL(file_path, fallback=fallback_lines.append)
+            chain = MiddlewareChain()
+            await chain.add(mw)
+
+            ping = SimplePingHandler()
+            handler_registry.register(ping)
+            handler_registry.register(_StartupAnnouncerHandler())
+
+            bus = EventBus(
+                base_event_registry,
+                handler_registry,
+                queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+                middleware_chain=chain,
+            )
+            async with bus:
+                await ping.wait_received(timeout=2.0)
+
+            lines = await asyncio.to_thread(_read_lines, file_path)
+            assert any(json.loads(line)['name'] == 'mw.ping' for line in lines)
+            assert fallback_lines == []
+        finally:
+            try:
+                os.unlink(file_path)
+            except OSError:
+                pass

@@ -86,7 +86,7 @@ class Middleware(ABC):
 
 #### `on_setup(bus)` / `on_teardown(bus)`
 
-Bus lifecycle hooks. `on_setup` is called after `bus.start()` completes, and **immediately when hot-adding via `add()` / `insert()` on a running bus**. `on_teardown` is called in **reverse registration order** when `stop()` finishes, and immediately when `remove()` / `clear()` is called on a running bus. Use these for initializing connection pools, registering background tasks, etc.
+Bus lifecycle hooks. `on_setup` is called during `bus.start()` (**before handler activation**, so messages published by handlers at activation go through a fully-ready middleware pipeline), and **immediately when hot-adding via `add()` / `insert()` on a running bus**. `on_teardown` is called in **reverse registration order** when `stop()` finishes, and immediately when `remove()` / `clear()` is called on a running bus. Use these for initializing connection pools, registering background tasks, etc.
 
 > **Note**: Middleware lifecycle is **fail-fast and atomic**, mirroring handler activation: an `on_setup` failure fails the whole bus start (rolled back, retryable after fixing), and a hot-added middleware whose `on_setup` fails is rolled back and rejected. Failing middlewares are never silently dropped.
 >

@@ -26,11 +26,13 @@ from infinity_bus import (
     EventRegistry,
     InMemoryEventQueue,
     InMemoryEventQueueConfig,
+    Middleware,
     MiddlewareChain,
     ShutdownConfig,
     ShutdownEvent,
     TaskErrorEvent,
 )
+from infinity_bus.middleware import BeforePublishNext, OnPublishNext
 
 # ============================================================================
 # 发布校验
@@ -463,8 +465,8 @@ async def test_start_failure_is_retryable_and_no_dispatch_leak(event_bus_factory
 
 
 @pytest.mark.asyncio
-async def test_start_rolls_back_when_late_stage_fails(event_bus_factory: Callable[..., EventBus]):
-    """激活成功但后续阶段（中间件 setup）失败 → 整体回滚调度任务与处理器，可重试（覆盖 _abort_start）"""
+async def test_start_rolls_back_when_middleware_setup_fails(event_bus_factory: Callable[..., EventBus]):
+    """首阶段（中间件 setup）冲突失败 → 整体回滚：链解绑、无调度泄漏，可重试（覆盖 _abort_start）"""
     hreg = EventHandlerRegistry()
     good = CountingHandler()
     hreg.register(good)
@@ -482,6 +484,119 @@ async def test_start_rolls_back_when_late_stage_fails(event_bus_factory: Callabl
     assert hreg._bus is None
 
     # 无需人工清理即可成功重试，事件正常路由分发
+    await bus.start()
+    await bus.proxy('pub').publish('test.event', {'value': 1})
+    await wait_for_condition(lambda: good.count == 1)
+    await bus.stop()
+    assert good.count == 1
+
+
+# ============================================================================
+# start() 生命周期顺序（回归：处理器在激活阶段发布的消息须经过完整中间件管道）
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_start_orders_middleware_setup_before_handler_activation(
+    event_bus_factory: Callable[..., EventBus],
+) -> None:
+    """启动顺序：先初始化中间件、再激活处理器；停机顺序与之互为镜像——
+    处理器在激活阶段发布的消息因此经过完整可用的中间件管道。"""
+    order: List[str] = []
+
+    class _OrderMiddleware(Middleware):
+        async def before_publish(
+            self,
+            event_registry: EventRegistry,
+            name: str,
+            source: str,
+            data: dict[str, Any] | BaseModel | None,
+            old_event: Event | None,
+            next: BeforePublishNext,
+        ) -> None:
+            await next(event_registry, name, source, data, old_event)
+
+        async def on_publish(self, event: Event, next: OnPublishNext) -> None:
+            await next(event)
+
+        async def on_setup(self, bus: EventBus) -> None:
+            order.append('mw.on_setup')
+
+        async def on_teardown(self, bus: EventBus) -> None:
+            order.append('mw.on_teardown')
+
+    class _OrderHandler(EventHandler):
+        def __init__(self) -> None:
+            super().__init__(['test.event'])
+
+        def on_activate(self, bus: EventBus) -> None:
+            super().on_activate(bus)
+            order.append('handler.on_activate')
+
+        def on_deactivate(self, bus: EventBus) -> None:
+            super().on_deactivate(bus)
+            order.append('handler.on_deactivate')
+
+        async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+            pass
+
+    chain = MiddlewareChain()
+    await chain.add(_OrderMiddleware())
+    hreg = EventHandlerRegistry()
+    hreg.register(_OrderHandler())
+    bus = event_bus_factory(h_registry=hreg, middleware_chain=chain)
+
+    await bus.start()
+    assert order == ['mw.on_setup', 'handler.on_activate']
+
+    await bus.stop()
+    assert order == ['mw.on_setup', 'handler.on_activate', 'handler.on_deactivate', 'mw.on_teardown']
+
+
+@pytest.mark.asyncio
+async def test_start_rolls_back_middleware_when_handler_activation_fails(
+    event_bus_factory: Callable[..., EventBus],
+) -> None:
+    """中间件 setup 成功但处理器激活失败 → 中间件被整体回滚（on_teardown）且链解绑，可重试"""
+    teardowns: List[str] = []
+
+    class _TeardownSpyMiddleware(Middleware):
+        async def before_publish(
+            self,
+            event_registry: EventRegistry,
+            name: str,
+            source: str,
+            data: dict[str, Any] | BaseModel | None,
+            old_event: Event | None,
+            next: BeforePublishNext,
+        ) -> None:
+            await next(event_registry, name, source, data, old_event)
+
+        async def on_publish(self, event: Event, next: OnPublishNext) -> None:
+            await next(event)
+
+        async def on_teardown(self, bus: EventBus) -> None:
+            teardowns.append('mw.on_teardown')
+
+    chain = MiddlewareChain()
+    await chain.add(_TeardownSpyMiddleware())
+    hreg = EventHandlerRegistry()
+    hreg.register(_StartBoomHandler())
+    bus = event_bus_factory(h_registry=hreg, middleware_chain=chain)
+
+    with pytest.raises(RuntimeError, match='start boom'):
+        await bus.start()
+
+    # 已 setup 的中间件被回滚下线；未运行、无泄漏调度任务
+    assert teardowns == ['mw.on_teardown']
+    assert not bus.is_running
+    assert not bus.is_publishing_enabled
+    assert bus._dispatch_task is None
+
+    # 无需人工清理即可成功重试，事件正常路由分发
+    hreg.clear()
+    good = CountingHandler()
+    hreg.register(good)
     await bus.start()
     await bus.proxy('pub').publish('test.event', {'value': 1})
     await wait_for_condition(lambda: good.count == 1)

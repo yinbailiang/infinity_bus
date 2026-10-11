@@ -217,21 +217,25 @@ class EventBus:
     async def start(self) -> None:
         """启动事件分发循环（**失败可重试**）。
 
-        先激活处理器（订阅登记）再启动调度循环：任一环节失败都会整体回滚——
-        撤销调度任务、下线处理器、回滚中间件——使总线回到可安全重试的
-        「未启动」态，不会泄漏半启动的后台任务。
+        启动顺序与 :meth:`stop` 的清理顺序互为镜像：**先初始化中间件、再激活
+        处理器**（处理器在激活阶段发布的消息也因此经过完整的中间件管道），
+        最后启动调度循环并开放发布。任一环节失败都会整体回滚——撤销调度任务、
+        下线处理器、回滚中间件——使总线回到可安全重试的「未启动」态，
+        不会泄漏半启动的后台任务。
         """
         async with self._state_lock:
             if self._running.is_set():
                 return
-            # 阶段一：激活处理器（订阅登记）。失败时不产生任何后台任务，天然可重试。
-            self._handlers.activate(self)
-            # 阶段二：启动调度循环、对外就绪、初始化中间件。失败则回滚已获得资源。
             try:
+                # 阶段一：初始化中间件。必须先于处理器激活——处理器（及其后台任务）
+                # 在激活/启动阶段发布的消息依赖已就绪的中间件管道。
+                await self._mw_chain.setup(self)
+                # 阶段二：激活处理器（订阅登记）。
+                self._handlers.activate(self)
+                # 阶段三：启动调度循环、对外就绪。
                 self._dispatch_task = asyncio.create_task(self._dispatch_loop())
                 self._running.set()
                 self._enable_publish.set()
-                await self._mw_chain.setup(self)
             except Exception:
                 logger.exception('Error occurred while starting event bus')
                 await self._abort_start()
@@ -253,8 +257,8 @@ class EventBus:
                     await task
                 except asyncio.CancelledError:
                     pass
-            self._running.clear()
             self._enable_publish.clear()
+            self._running.clear()
             await self._wait_all_tasks_done()
         except Exception:
             logger.exception('Failed to roll back dispatch during start')
