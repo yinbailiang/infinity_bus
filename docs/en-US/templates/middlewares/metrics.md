@@ -16,11 +16,11 @@ Prometheus scrape endpoints or OTLP Collectors.
 
 | Metric Name | Type | Description |
 | - | - | - |
-| `event_bus_publish_total` | Counter | Publish count by event name (including failed attempts) |
-| `event_bus_publish_duration` | Histogram | Publish latency (before_publish → end of on_publish) |
-| `event_bus_publish_errors_total` | Counter | Publish failure count |
-| `event_bus_queue_size` | Gauge | Current event queue depth |
-| `event_bus_active_tasks` | Gauge | Current active handler task count |
+| `infinity_bus_publish_total` | Counter | Publish count by event name (including failed attempts) |
+| `infinity_bus_publish_duration` | Histogram | Publish latency (before_publish → end of on_publish) |
+| `infinity_bus_publish_errors_total` | Counter | Publish failure count |
+| `infinity_bus_queue_size` | Gauge | Current event queue depth |
+| `infinity_bus_active_tasks` | Gauge | Current active handler task count |
 
 ---
 
@@ -130,8 +130,8 @@ Key points:
 ### Pure In-Memory Mode
 
 ```python
-from event_bus.templates.middlewares import MetricsMiddleware
-from event_bus import MiddlewareChain
+from infinity_bus.templates.middlewares import MetricsMiddleware
+from infinity_bus import MiddlewareChain
 
 metrics = MetricsMiddleware()
 chain = MiddlewareChain()
@@ -184,7 +184,7 @@ reader = PeriodicExportingMetricReader(ConsoleMetricExporter())
 provider = MeterProvider(metric_readers=[reader])
 otel_metrics.set_meter_provider(provider)
 
-meter = otel_metrics.get_meter("event_bus")
+meter = otel_metrics.get_meter("infinity_bus")
 
 metrics = MetricsMiddleware()
 metrics.integrate_opentelemetry(meter)
@@ -202,7 +202,7 @@ metrics = MetricsMiddleware(histogram_bounds=(0.01, 0.05, 0.1, 0.5, 1.0, 5.0))
 ### Composing with Other Middlewares
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     MetricsMiddleware,
     RateLimitMiddleware,
     JSONLLoggingMiddleware,

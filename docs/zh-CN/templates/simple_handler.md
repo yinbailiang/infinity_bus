@@ -59,8 +59,8 @@ def handler(
 ### 基础用法：无负载事件
 
 ```python
-from event_bus import EventDeclaration
-from event_bus.templates import handler
+from infinity_bus import EventDeclaration
+from infinity_bus.templates import handler
 
 class SystemReady(EventDeclaration):
     name = "system.ready"
@@ -77,8 +77,8 @@ handler_registry.register(on_system_ready())
 
 ```python
 from pydantic import BaseModel, Field
-from event_bus import EventDeclaration
-from event_bus.templates import handler
+from infinity_bus import EventDeclaration
+from infinity_bus.templates import handler
 
 class UserCreatedPayload(BaseModel):
     user_id: str = Field(description="用户ID")
@@ -143,7 +143,7 @@ def another_bad(payload: OtherPayload) -> None:
 ### 与 ModuleHandlerRegister 配合
 
 ```python
-from event_bus.templates import ModuleHandlerRegister
+from infinity_bus.templates import ModuleHandlerRegister
 
 module_handlers = ModuleHandlerRegister("user_module")
 

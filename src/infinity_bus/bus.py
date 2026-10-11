@@ -24,7 +24,7 @@ class BusShuttingDown(Exception):
 class ShutdownEvent(EventDeclaration):
     """总线停机前发布的系统事件，通知所有处理器准备退出。"""
 
-    name = 'event_bus.__shutdown__'
+    name = 'infinity_bus.__shutdown__'
 
 
 class TaskErrorPayload(BaseModel):
@@ -40,7 +40,7 @@ class TaskErrorPayload(BaseModel):
 class TaskErrorEvent(EventDeclaration):
     """处理器执行异常时发布的系统事件，用于错误监控与故障排查。"""
 
-    name = 'event_bus.__task_error__'
+    name = 'infinity_bus.__task_error__'
     payload_type = TaskErrorPayload
 
 
@@ -58,8 +58,8 @@ class EventBus:
     异步事件总线，支持订阅/发布模式
 
     系统内置事件:
-    event_bus.__task_error__ 任务执行失败时发送，载荷为 TaskErrorPayload，发布者为 EventBusErrorReporter
-    event_bus.__shutdown__ 总线将要关闭时发送, 无载荷, 发布者为 EventBus
+    infinity_bus.__task_error__ 任务执行失败时发送，载荷为 TaskErrorPayload，发布者为 EventBusErrorReporter
+    infinity_bus.__shutdown__ 总线将要关闭时发送, 无载荷, 发布者为 EventBus
     """
 
     class Proxy:

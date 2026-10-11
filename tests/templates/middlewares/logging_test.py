@@ -12,7 +12,7 @@ from conftest import (
 )
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     EventBus,
     EventHandlerRegistry,
     EventRegistry,
@@ -20,7 +20,7 @@ from event_bus import (
     InMemoryEventQueueConfig,
     MiddlewareChain,
 )
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     JSONLLoggingMiddleware,
     SQLiteLoggingMiddleware,
 )

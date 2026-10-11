@@ -18,7 +18,7 @@ uv add infinity_bus --extra templates
 
 ## Quick Links
 
-- [Core Overview](event_bus.md) — architecture and component map
+- [Core Overview](infinity_bus.md) — architecture and component map
 - [Templates Overview](templates/templates.md) — the advanced templates
 - [README (Quick Start)](https://github.com/yinbailiang/event_bus/blob/master/README.md)
 
@@ -27,8 +27,8 @@ uv add infinity_bus --extra templates
 ```python
 import asyncio
 from pydantic import BaseModel
-from event_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
-from event_bus.templates import handler
+from infinity_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
+from infinity_bus.templates import handler
 
 class MyPayload(BaseModel):
     message: str

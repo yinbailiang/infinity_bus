@@ -18,7 +18,8 @@
 - [✨ 特性](#-特性)
 - [🔍 同类对比](#-同类对比)
 - [📦 安装](#-安装)
-- [🚀 快速开始](#-快速开始)
+- [� 从 v4 迁移](#-从-v4-迁移)
+- [�🚀 快速开始](#-快速开始)
 - [🧱 架构](#-架构)
 - [📚 文档](#-文档)
 - [🧪 测试](#-测试)
@@ -114,7 +115,22 @@ cd event_bus
 uv sync --extra dev
 ```
 
-## 🚀 快速开始
+## � 从 v4 迁移
+
+自 **v5.0.0** 起，导入包名由 `event_bus` 更名为 `infinity_bus`（PyPI 发行名仍为 `infinity_bus`），**不提供**兼容别名。升级时请更新导入：
+
+| v4 | v5 |
+| - | - |
+| `from event_bus import EventBus` | `from infinity_bus import EventBus` |
+| `from event_bus.templates import handler` | `from infinity_bus.templates import handler` |
+| 系统事件 `event_bus.__shutdown__` / `event_bus.__task_error__` | `infinity_bus.__shutdown__` / `infinity_bus.__task_error__` |
+| 指标 `event_bus_publish_total`、`event_bus_queue_size` 等 | `infinity_bus_publish_total`、`infinity_bus_queue_size` 等 |
+| RabbitMQ exchange `event_bus.fanout` | `infinity_bus.fanout` |
+| 日志名 `event_bus.*` | `infinity_bus.*` |
+
+类名 / 函数名与行为完全不变。
+
+## �🚀 快速开始
 
 ### 基础发布/订阅
 
@@ -124,11 +140,11 @@ uv sync --extra dev
 ```python
 import asyncio
 from pydantic import BaseModel
-from event_bus import (
+from infinity_bus import (
     EventBus, EventDeclaration,
     EventRegistry, EventHandlerRegistry,
 )
-from event_bus.templates import handler
+from infinity_bus.templates import handler
 
 # 1. 定义负载
 class MyPayload(BaseModel):
@@ -166,11 +182,11 @@ asyncio.run(main())
 ```python
 import asyncio
 from pydantic import BaseModel
-from event_bus import (
+from infinity_bus import (
     EventBus, EventDeclaration, EventHandler,
     EventRegistry, EventHandlerRegistry,
 )
-from event_bus.templates.request import (
+from infinity_bus.templates.request import (
     request, RequestProtocol, ResponseProtocol,
 )
 
@@ -254,7 +270,7 @@ asyncio.run(main())
 
 | 文档 | 内容 |
 | - | - |
-| [核心总览](docs/zh-CN/event_bus.md) | Event / EventDeclaration / EventHandler / EventBus / Middleware 核心概念 |
+| [核心总览](docs/zh-CN/infinity_bus.md) | Event / EventDeclaration / EventHandler / EventBus / Middleware 核心概念 |
 | [中间件系统](docs/zh-CN/middleware.md) | `Middleware` 基类、`MiddlewareChain` 洋葱管道 |
 | [高级模板](docs/zh-CN/templates/templates.md) | `expect`、`request`、`pipe`、`register` 四大模板总览 |
 | [内置中间件](docs/zh-CN/templates/middlewares/middlewares.md) | 日志、限流、转换、屏蔽、递归防护 |

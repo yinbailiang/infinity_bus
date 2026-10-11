@@ -99,7 +99,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["event_bus"]
+known-first-party = ["infinity_bus"]
 
 [tool.ruff.format]
 indent-style = "space"

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import BaseModel, Field
 
-from event_bus import (
+from infinity_bus import (
     BusShuttingDown,
     Event,
     EventBus,
@@ -15,7 +15,7 @@ from event_bus import (
     EventRegistry,
     Router,
 )
-from event_bus.templates.request import (
+from infinity_bus.templates.request import (
     RequestProtocol,
     ResponseProtocol,
     build_response,

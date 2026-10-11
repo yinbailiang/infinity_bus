@@ -9,7 +9,7 @@ from conftest import (
 )
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventDeclaration,
@@ -19,7 +19,7 @@ from event_bus import (
     InMemoryEventQueueConfig,
     MiddlewareChain,
 )
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventTransformMiddleware,
     make_field_inject_transform,
     make_field_redact_transform,
@@ -172,7 +172,7 @@ class TestEventTransformMiddleware:
             data: dict[str, Any] | BaseModel | None,
         ) -> tuple[str, dict[str, Any] | BaseModel | None]:
             # 不对系统事件添加前缀
-            if name.startswith('event_bus.'):
+            if name.startswith('infinity_bus.'):
                 return name, data
             return f'prefix.{name}', data
 

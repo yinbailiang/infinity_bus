@@ -68,7 +68,7 @@
 ## 全部导出
 
 ```python
-from event_bus.templates import (
+from infinity_bus.templates import (
     # handler
     'handler',
     # expect
@@ -128,7 +128,7 @@ from event_bus.templates import (
 ## handler
 
 ```python
-from event_bus.templates import handler
+from infinity_bus.templates import handler
 
 @handler(UserCreated)
 async def send_welcome_email(payload: UserCreatedPayload) -> None:
@@ -142,7 +142,7 @@ handler_registry.register(send_welcome_email())
 ## expect
 
 ```python
-from event_bus.templates import expect
+from infinity_bus.templates import expect
 
 async with expect(bus_proxy, "user.login") as future:
     await bus_proxy.publish("auth.request", {...})
@@ -154,7 +154,7 @@ async with expect(bus_proxy, "user.login") as future:
 ## request
 
 ```python
-from event_bus.templates import request
+from infinity_bus.templates import request
 
 response = await request(
     bus_proxy,
@@ -169,10 +169,10 @@ response = await request(
 
 ## handlers
 
-`event_bus.templates.handlers` 提供两种处理器基类模板：
+`infinity_bus.templates.handlers` 提供两种处理器基类模板：
 
 ```python
-from event_bus.templates import MailboxHandler, ServiceHandler, process
+from infinity_bus.templates import MailboxHandler, ServiceHandler, process
 
 # 服务处理器：RPC 服务端（@process 装饰器）
 class OrderService(ServiceHandler):
@@ -193,7 +193,7 @@ class SerialWorker(MailboxHandler):
 ## pipe
 
 ```python
-from event_bus.templates import open_pipe
+from infinity_bus.templates import open_pipe
 
 async with open_pipe(pipe_id="my_pipe") as pipe:
     await pipe.send(MyData(...))
@@ -205,7 +205,7 @@ async with open_pipe(pipe_id="my_pipe") as pipe:
 ## register
 
 ```python
-from event_bus.templates import ModuleEventRegister, ModuleHandlerRegister
+from infinity_bus.templates import ModuleEventRegister, ModuleHandlerRegister
 
 events = ModuleEventRegister("orders")
 
@@ -224,7 +224,7 @@ events.register_all_events(event_registry)
 详见 [middlewares/middlewares.md](middlewares/middlewares.md) 完整文档。
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     JSONLLoggingMiddleware,
     RateLimitMiddleware,
     MetricsMiddleware,

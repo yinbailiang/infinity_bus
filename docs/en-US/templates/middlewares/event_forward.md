@@ -42,8 +42,8 @@ Source Bus                                Target Bus
 ## Quick Start
 
 ```python
-from event_bus import EventBus, EventRegistry, EventHandlerRegistry, MiddlewareChain
-from event_bus.templates.middlewares import EventForwardMiddleware
+from infinity_bus import EventBus, EventRegistry, EventHandlerRegistry, MiddlewareChain
+from infinity_bus.templates.middlewares import EventForwardMiddleware
 
 # 1. Create two buses
 source_bus = EventBus(source_registry, source_handlers)
@@ -94,7 +94,7 @@ class EventForwardMiddleware(Middleware):
 | `target` | `EventBus \| TargetBusProvider` | (required) | Target bus or callback returning a target bus. |
 | `source_name` | `str` | `"event_forward"` | Source identifier used when publishing on the target bus. |
 | `event_filter` | `Optional[EventFilter]` | `None` | Event filter callback. `None` forwards all non-system events. |
-| `forward_system_events` | `bool` | `False` | Whether to forward `event_bus.*` system events. |
+| `forward_system_events` | `bool` | `False` | Whether to forward `infinity_bus.*` system events. |
 
 ## Usage Patterns
 
@@ -126,7 +126,7 @@ fw = EventForwardMiddleware(
 )
 
 # Using factory function: allowlist mode
-from event_bus.templates import make_event_name_filter
+from infinity_bus.templates import make_event_name_filter
 
 fw = EventForwardMiddleware(
     target=other_bus,
@@ -223,8 +223,8 @@ middleware automatically skips events forwarded by the opposite direction. Speci
 - `b_to_a` skips events whose `sources` contain `"a→b"`
 
 ```python
-from event_bus import EventBus, MiddlewareChain
-from event_bus.templates import make_bidirectional_forward
+from infinity_bus import EventBus, MiddlewareChain
+from infinity_bus.templates import make_bidirectional_forward
 
 # Create bidirectional forward pair in one call
 a_to_b, b_to_a = make_bidirectional_forward(
@@ -251,7 +251,7 @@ bus_b.proxy('forward').middleware.add(b_to_a)
 1. **Target bus lifecycle**: `EventForwardMiddleware` does not manage target bus
    start/stop. Ensure the target bus is already started before registering the
    forwarding middleware.
-2. **System events**: `event_bus.*` events are skipped by default. To forward them
+2. **System events**: `infinity_bus.*` events are skipped by default. To forward them
    (e.g. for debugging), set `forward_system_events=True`.
 3. **Payload validation**: Ensure the target bus has registered an `EventDeclaration`
    with the **same name** as the source event and a compatible `payload_type`,

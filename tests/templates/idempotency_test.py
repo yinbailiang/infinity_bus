@@ -7,14 +7,14 @@ import pytest
 from conftest import BusTestPayload, TestEventDecl
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventHandlerRegistry,
     EventRegistry,
     InMemoryEventQueue,
 )
-from event_bus.templates.idempotency import (
+from infinity_bus.templates.idempotency import (
     IdempotentHandler,
     InMemoryIdempotencyRecorder,
     SqliteIdempotencyRecorder,

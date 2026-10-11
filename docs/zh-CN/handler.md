@@ -79,7 +79,7 @@ async def handle(
 ### 使用示例
 
 ```python
-from event_bus import EventHandler, Regex
+from infinity_bus import EventHandler, Regex
 
 class LoginHandler(EventHandler):
     def __init__(self):
@@ -104,7 +104,7 @@ class LoginHandler(EventHandler):
 | `Regex` | `Regex(r"(?!system\.).*")` | 匹配除 `system.*` 外的所有事件 |
 
 ```python
-from event_bus import EventHandler, Regex
+from infinity_bus import EventHandler, Regex
 
 class AuditHandler(EventHandler):
     def __init__(self):
@@ -164,7 +164,7 @@ class EventHandlerRegistry:
 ### 使用示例
 
 ```python
-from event_bus import EventHandlerRegistry, EventHandler
+from infinity_bus import EventHandlerRegistry, EventHandler
 
 handler_registry = EventHandlerRegistry()
 handler_id = handler_registry.register(my_handler)

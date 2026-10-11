@@ -14,10 +14,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from conftest import BusTestPayload, TestEventDecl
 
-import event_bus.templates.queues.rabbit.queue as rabbit_queue
-from event_bus import Event, EventRegistry
-from event_bus.templates.queues import EventCodec
-from event_bus.templates.queues.rabbit.queue import RabbitFanoutQueue
+import infinity_bus.templates.queues.rabbit.queue as rabbit_queue
+from infinity_bus import Event, EventRegistry
+from infinity_bus.templates.queues import EventCodec
+from infinity_bus.templates.queues.rabbit.queue import RabbitFanoutQueue
 
 pytestmark = pytest.mark.asyncio
 

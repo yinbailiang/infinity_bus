@@ -14,7 +14,7 @@ uv run pre-commit install
 ## 目录约定
 
 ```text
-src/event_bus/    → 源码（pyright strict，零 # type: ignore）
+src/infinity_bus/    → 源码（pyright strict，零 # type: ignore）
 tests/            → 测试（与 src 路径镜像）
 docs/             → 文档（中英双语，与 src 模块一一对应）
 ```
@@ -27,7 +27,7 @@ docs/             → 文档（中英双语，与 src 模块一一对应）
 4. **验证**
 
    ```bash
-   uv run pytest tests/ --cov=event_bus --cov-report=term-missing
+   uv run pytest tests/ --cov=infinity_bus --cov-report=term-missing
    uv run pre-commit run --all-files
    ```
 
@@ -58,7 +58,7 @@ docs/             → 文档（中英双语，与 src 模块一一对应）
 
 ## 发版流程
 
-1. 更新 `pyproject.toml` 和 `src/event_bus/__init__.py` 中的版本号
+1. 更新 `pyproject.toml` 和 `src/infinity_bus/__init__.py` 中的版本号
 2. 提交：`git commit -m "chore: bump version to X.Y.Z"`
 3. 推送：`git push`
 4. 打标签：`git tag -a vX.Y.Z` 并 `git push origin vX.Y.Z`

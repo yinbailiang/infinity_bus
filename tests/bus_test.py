@@ -17,7 +17,7 @@ from conftest import (
 )
 from pydantic import BaseModel, ValidationError
 
-from event_bus import (
+from infinity_bus import (
     BusShuttingDown,
     Event,
     EventBus,

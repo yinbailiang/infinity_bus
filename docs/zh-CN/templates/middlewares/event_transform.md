@@ -107,7 +107,7 @@ sequenceDiagram
 ### 事件重命名
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventTransformMiddleware,
     make_rename_transform,
 )
@@ -122,7 +122,7 @@ mw = EventTransformMiddleware(transform)
 ### 字段注入
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventTransformMiddleware,
     make_field_inject_transform,
 )
@@ -141,7 +141,7 @@ mw = EventTransformMiddleware(transform)
 ### 字段脱敏
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventTransformMiddleware,
     make_field_redact_transform,
 )
@@ -158,7 +158,7 @@ mw = EventTransformMiddleware(transform)
 ```python
 def add_prefix(name: str, data) -> tuple:
     # 不对系统事件添加前缀
-    if name.startswith("event_bus."):
+    if name.startswith("infinity_bus."):
         return name, data
     return f"prefix.{name}", data
 

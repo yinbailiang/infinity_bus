@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventDeclaration,

@@ -87,8 +87,8 @@ sequenceDiagram
 All events share a limit of 100 per second:
 
 ```python
-from event_bus.templates.middlewares import RateLimitMiddleware
-from event_bus import MiddlewareChain
+from infinity_bus.templates.middlewares import RateLimitMiddleware
+from infinity_bus import MiddlewareChain
 
 mw = RateLimitMiddleware(max_requests=100, window_seconds=1.0)
 chain = MiddlewareChain()
@@ -122,7 +122,7 @@ Rate-limit first, then transform — ensuring transforms only apply to events th
 the rate limit:
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     RateLimitMiddleware,
     EventTransformMiddleware,
     make_field_inject_transform,

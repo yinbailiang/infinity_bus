@@ -7,7 +7,7 @@ import pytest
 from conftest import SimplePingHandler
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventHandler,
@@ -18,7 +18,7 @@ from event_bus import (
     MiddlewareChain,
     Regex,
 )
-from event_bus.templates import (
+from infinity_bus.templates import (
     RecursionGuardMiddleware,
 )
 

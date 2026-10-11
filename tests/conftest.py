@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Type
 import pytest
 from pydantic import BaseModel, Field
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventDeclaration,
@@ -26,7 +26,7 @@ from event_bus import (
 )
 
 # 抑制日志噪音
-logging.getLogger('event_bus').setLevel(logging.WARNING)
+logging.getLogger('infinity_bus').setLevel(logging.WARNING)
 
 # ============================================================================
 # 测试用 Payload
@@ -203,7 +203,7 @@ class ErrorSpyHandler(BaseTestHandler):
     """捕获 __task_error__ 事件"""
 
     def __init__(self):
-        super().__init__(['event_bus.__task_error__'])
+        super().__init__(['infinity_bus.__task_error__'])
         self.captured: List[Dict[str, str]] = []
 
     async def _do_handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event):

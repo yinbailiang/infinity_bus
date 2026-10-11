@@ -92,8 +92,8 @@ class ModuleHandlerRegister:
 ### 基础用法：事件注册
 
 ```python
-from event_bus import EventDeclaration, EventRegistry
-from event_bus.templates.register import ModuleEventRegister
+from infinity_bus import EventDeclaration, EventRegistry
+from infinity_bus.templates.register import ModuleEventRegister
 
 # 创建模块级注册器
 module_events = ModuleEventRegister("user_module")
@@ -123,8 +123,8 @@ print(module_events.get_all_event_names())
 ### 基础用法：处理器注册
 
 ```python
-from event_bus import EventHandler, EventHandlerRegistry
-from event_bus.templates.register import ModuleHandlerRegister
+from infinity_bus import EventHandler, EventHandlerRegistry
+from infinity_bus.templates.register import ModuleHandlerRegister
 
 module_handlers = ModuleHandlerRegister("user_module")
 
@@ -156,8 +156,8 @@ module_handlers.register_all_handlers(handler_registry)
 
 ```python
 # user_module/events.py
-from event_bus import EventDeclaration
-from event_bus.templates.register import ModuleEventRegister
+from infinity_bus import EventDeclaration
+from infinity_bus.templates.register import ModuleEventRegister
 
 user_events = ModuleEventRegister("user")
 
@@ -173,8 +173,8 @@ class UserUpdated(EventDeclaration):
 
 
 # user_module/handlers.py
-from event_bus import EventHandler
-from event_bus.templates.register import ModuleHandlerRegister
+from infinity_bus import EventHandler
+from infinity_bus.templates.register import ModuleHandlerRegister
 
 user_handlers = ModuleHandlerRegister("user")
 
@@ -194,7 +194,7 @@ class UserEventHandler(EventHandler):
 # app.py（启动时）
 from user_module.events import user_events
 from user_module.handlers import user_handlers
-from event_bus import EventRegistry, EventHandlerRegistry, EventBus
+from infinity_bus import EventRegistry, EventHandlerRegistry, EventBus
 
 event_registry = EventRegistry()
 handler_registry = EventHandlerRegistry()

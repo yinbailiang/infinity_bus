@@ -110,8 +110,8 @@ await get() → 取出 (event, proxy)
 ### 基础用法：串行事件收集
 
 ```python
-from event_bus import Event, EventBus
-from event_bus.templates import MailboxHandler
+from infinity_bus import Event, EventBus
+from infinity_bus.templates import MailboxHandler
 
 class MyHandler(MailboxHandler):
     def __init__(self):
@@ -181,7 +181,7 @@ class RobustHandler(MailboxHandler):
 ### 主动停止：业务驱动的退出
 
 ```python
-from event_bus.templates import MailboxHandler, StopMailbox
+from infinity_bus.templates import MailboxHandler, StopMailbox
 
 class DrainThenStopHandler(MailboxHandler):
     """处理到停机指令后主动结束消费循环"""

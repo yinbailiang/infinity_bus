@@ -4,7 +4,7 @@ from typing import Any, Awaitable, Callable, Dict, Literal, Optional, Set, Union
 
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     BeforePublishNext,
     Event,
     EventBus,
@@ -41,10 +41,10 @@ class EventForwardMiddleware(Middleware):
         为 ``None`` 时转发所有非系统事件。
         支持同步或异步回调。
     forward_system_events:
-        是否转发 ``event_bus.*`` 系统事件，默认 ``False``。
+        是否转发 ``infinity_bus.*`` 系统事件，默认 ``False``。
     """
 
-    _SYSTEM_EVENT_PREFIX = 'event_bus.'
+    _SYSTEM_EVENT_PREFIX = 'infinity_bus.'
 
     def __init__(
         self,
@@ -228,7 +228,7 @@ def make_bidirectional_forward(
         启用后，每个方向自动跳过已由对向中间件转发过来的事件，
         防止 A→B→A→B… 无限循环。
     forward_system_events:
-        是否转发 ``event_bus.*`` 系统事件，默认 ``False``。
+        是否转发 ``infinity_bus.*`` 系统事件，默认 ``False``。
 
     Example::
 

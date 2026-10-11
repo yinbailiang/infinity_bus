@@ -38,8 +38,8 @@
 ## 快速开始
 
 ```python
-from event_bus import EventBus, EventRegistry, EventHandlerRegistry, MiddlewareChain
-from event_bus.templates.middlewares import EventForwardMiddleware
+from infinity_bus import EventBus, EventRegistry, EventHandlerRegistry, MiddlewareChain
+from infinity_bus.templates.middlewares import EventForwardMiddleware
 
 # 1. 创建两条总线
 source_bus = EventBus(source_registry, source_handlers)
@@ -90,7 +90,7 @@ class EventForwardMiddleware(Middleware):
 | `target` | `EventBus \| TargetBusProvider` | (必需) | 目标总线或返回目标总线的回调。 |
 | `source_name` | `str` | `"event_forward"` | 在目标总线上发布时使用的来源标识。 |
 | `event_filter` | `Optional[EventFilter]` | `None` | 事件过滤回调，`None` 时转发所有非系统事件。 |
-| `forward_system_events` | `bool` | `False` | 是否转发 `event_bus.*` 系统事件。 |
+| `forward_system_events` | `bool` | `False` | 是否转发 `infinity_bus.*` 系统事件。 |
 
 ## 使用模式
 
@@ -122,7 +122,7 @@ fw = EventForwardMiddleware(
 )
 
 # 使用工厂函数：白名单模式
-from event_bus.templates import make_event_name_filter
+from infinity_bus.templates import make_event_name_filter
 
 fw = EventForwardMiddleware(
     target=other_bus,
@@ -216,8 +216,8 @@ def make_bidirectional_forward(
 - ``b_to_a`` 跳过 ``sources`` 中包含 ``"a→b"`` 的事件
 
 ```python
-from event_bus import EventBus, MiddlewareChain
-from event_bus.templates import make_bidirectional_forward
+from infinity_bus import EventBus, MiddlewareChain
+from infinity_bus.templates import make_bidirectional_forward
 
 # 一键创建双向转发对
 a_to_b, b_to_a = make_bidirectional_forward(
@@ -242,7 +242,7 @@ bus_b.proxy('forward').middleware.add(b_to_a)
 
 1. **目标总线生命周期**：`EventForwardMiddleware` 不负责目标总线的启动/停止。
    请在注册转发中间件之前确保目标总线已启动。
-2. **系统事件**：默认跳过 `event_bus.*` 事件。如需转发（例如调试），设置
+2. **系统事件**：默认跳过 `infinity_bus.*` 事件。如需转发（例如调试），设置
    `forward_system_events=True`。
 3. **负载校验**：确保目标总线注册了与源事件**同名的 EventDeclaration**，且
    `payload_type` 兼容，否则转发将在目标总线抛出校验错误。

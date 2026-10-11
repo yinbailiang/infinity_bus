@@ -114,7 +114,7 @@ Key points:
 ### Event Renaming
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventTransformMiddleware,
     make_rename_transform,
 )
@@ -129,7 +129,7 @@ mw = EventTransformMiddleware(transform)
 ### Field Injection
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventTransformMiddleware,
     make_field_inject_transform,
 )
@@ -149,7 +149,7 @@ Publishing `{"user_id": 42}` → actual payload becomes
 ### Field Redaction
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventTransformMiddleware,
     make_field_redact_transform,
 )
@@ -167,7 +167,7 @@ Publishing `{"username": "alice", "password": "s3cret!"}` → actual payload bec
 ```python
 def add_prefix(name: str, data) -> tuple:
     # Don't add prefix to system events
-    if name.startswith("event_bus."):
+    if name.startswith("infinity_bus."):
         return name, data
     return f"prefix.{name}", data
 

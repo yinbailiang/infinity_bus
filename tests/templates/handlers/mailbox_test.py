@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 
 import pytest
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventDeclaration,
@@ -18,7 +18,7 @@ from event_bus import (
     InMemoryEventQueueConfig,
     Regex,
 )
-from event_bus.templates.handlers.mailbox import MailboxConfig, MailboxHandler, StopMailbox
+from infinity_bus.templates.handlers.mailbox import MailboxConfig, MailboxHandler, StopMailbox
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +309,7 @@ class TestShutdown:
         await asyncio.sleep(0.05)
 
         event_names = [e.name for e, _ in handler.received]
-        assert 'event_bus.__shutdown__' not in event_names
+        assert 'infinity_bus.__shutdown__' not in event_names
         assert 'mailbox.ping' in event_names
 
     async def test_shutdown_clears_task_reference(
@@ -577,8 +577,8 @@ class TestEdgeCases:
 
     async def test_declared_subscriptions_preserved(self) -> None:
         """显式声明的订阅原样保留（含重复也不去重——已无隐式追加）"""
-        handler = _CollectHandler(subscriptions=['mailbox.ping', 'event_bus.__shutdown__'])
-        assert handler.subscriptions == ['mailbox.ping', 'event_bus.__shutdown__']
+        handler = _CollectHandler(subscriptions=['mailbox.ping', 'infinity_bus.__shutdown__'])
+        assert handler.subscriptions == ['mailbox.ping', 'infinity_bus.__shutdown__']
 
     async def test_put_after_deactivation_is_dropped_not_orphaned(
         self, event_registry: EventRegistry, handler_registry: EventHandlerRegistry

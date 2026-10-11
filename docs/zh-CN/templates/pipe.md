@@ -11,7 +11,7 @@
 - 测试框架中模拟双向 RPC 通道。
 - 将同步式请求-响应模型扩展为持久化双向流。
 
-本模块依赖 [EventBus](../event_bus.md) 作为底层消息路由，并复用了 `request` 和 `expect` 模板来实现握手协议。
+本模块依赖 [EventBus](../infinity_bus.md) 作为底层消息路由，并复用了 `request` 和 `expect` 模板来实现握手协议。
 
 ---
 
@@ -336,4 +336,4 @@ except asyncio.TimeoutError:
 
 ## 完整示例
 
-参考项目中的 `tests/core/event_bus/templates/pipe_test.py`，其中包含握手成功、超时、管道关闭、并发发送接收等场景的完整测试。
+参考项目中的 `tests/templates/pipe_test.py`，其中包含握手成功、超时、管道关闭、并发发送接收等场景的完整测试。

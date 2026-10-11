@@ -17,8 +17,8 @@ RabbitMQ/AMQP 是 push 模型、无 Kafka 式 pause/resume 一等 API ——「�
 
     # broker 就绪后
     import aio_pika
-    from event_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
-    from event_bus.templates.queues import EventCodec, RabbitFanoutQueue
+    from infinity_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
+    from infinity_bus.templates.queues import EventCodec, RabbitFanoutQueue
 
     class PingEvent(EventDeclaration):
         name = 'demo.ping'
@@ -36,7 +36,7 @@ RabbitMQ/AMQP 是 push 模型、无 Kafka 式 pause/resume 一等 API ——「�
 --------
 - 补投靠 durable 命名队列：不用时须显式删队列，否则残留影响下次运行。
 - 消费端在途崩溃（已投递未 ack）：RabbitMQ 会重投未 ack 消息（at-least-once）；
-  重复投递由 ``event_bus.templates.idempotency`` 的 recorder 去重（可选）。
+  重复投递由 ``infinity_bus.templates.idempotency`` 的 recorder 去重（可选）。
 - 负载重建依赖注入的 registry/``EventCodec``；未注册事件保持原始 JSON 值透传。
 
 依赖：需 ``aio-pika``（``pip install infinity_bus[templates]``）。模块惰性导入，
@@ -49,7 +49,7 @@ import asyncio
 import os
 from typing import Any, Literal, Optional
 
-from event_bus import Event, EventQueue, EventRegistry
+from infinity_bus import Event, EventQueue, EventRegistry
 
 from ..codec import EventCodec
 
@@ -68,7 +68,7 @@ except ImportError as _e:  # pragma: no cover - 依赖缺失路径
 URL = os.environ.get('RABBITMQ_URL', 'amqp://guest:guest@127.0.0.1:5672/')
 """默认 broker URL（可用环境变量 RABBITMQ_URL 覆盖）。"""
 
-EXCHANGE = 'event_bus.fanout'
+EXCHANGE = 'infinity_bus.fanout'
 """默认 fanout exchange 名。"""
 
 

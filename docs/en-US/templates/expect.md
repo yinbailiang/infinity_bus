@@ -123,7 +123,7 @@ async with expect(bus_proxy, ["order.paid", "order.cancelled"]) as future:
 ### Regex Pattern Matching
 
 ```python
-from event_bus import Regex
+from infinity_bus import Regex
 
 # Match all events starting with "notify."
 async with expect(bus_proxy, Regex(r"notify\..*")) as future:

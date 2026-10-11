@@ -103,7 +103,7 @@ sequenceDiagram
 Block specific event names:
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventBlockMiddleware,
     make_blocklist_predicate,
 )
@@ -118,7 +118,7 @@ mw = EventBlockMiddleware(pred, block_reason="debug events disabled in productio
 Only allow events in the allowlist:
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventBlockMiddleware,
     make_allowlist_predicate,
 )
@@ -147,7 +147,7 @@ mw = EventBlockMiddleware(block_negative_amount, block_reason="negative amount")
 Transform event names first, then block based on the new name:
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventBlockMiddleware,
     EventTransformMiddleware,
     make_blocklist_predicate,
@@ -179,7 +179,7 @@ chain.add(EventBlockMiddleware(
 4. **Predicates should be side-effect-free**: Predicates may be called multiple times;
    avoid modifying global state inside them.
 5. **Allowlist caveat**: `make_allowlist_predicate` blocks **all** unlisted system events
-   (e.g., `event_bus.__shutdown__`). Add necessary system events to the allowlist when
+   (e.g., `infinity_bus.__shutdown__`). Add necessary system events to the allowlist when
    using this mode.
 
 ---

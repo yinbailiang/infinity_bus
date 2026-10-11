@@ -201,7 +201,7 @@ class MiddlewareChain:
 ```python
 import time
 import logging
-from event_bus import Middleware, MiddlewareChain
+from infinity_bus import Middleware, MiddlewareChain
 
 logger = logging.getLogger(__name__)
 

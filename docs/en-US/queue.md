@@ -102,7 +102,7 @@ class EventBus:
 ### Inject a bounded queue (replaces old `max_queue_size`)
 
 ```python
-from event_bus import EventBus, InMemoryEventQueue, InMemoryEventQueueConfig
+from infinity_bus import EventBus, InMemoryEventQueue, InMemoryEventQueueConfig
 
 # Old: EventBus(reg, hreg, max_queue_size=100)
 queue = InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=100))
@@ -114,7 +114,7 @@ bus = EventBus(reg, hreg, queue=queue)
 Just implement the five `EventQueue` methods to swap the internal queue:
 
 ```python
-from event_bus import EventQueue, Event
+from infinity_bus import EventQueue, Event
 
 class PriorityEventQueue(EventQueue):
     """Example: priority-ordered custom queue (sketch; implement the full protocol)."""

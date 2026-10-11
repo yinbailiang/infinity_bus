@@ -58,7 +58,7 @@ Publish Request
 ## Full Exports
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     # Logging
     JSONLLoggingMiddleware,
     SQLiteLoggingMiddleware,
@@ -101,7 +101,7 @@ All middlewares inherit from the `Middleware` abstract base class. Custom middle
 only need to implement the required hooks:
 
 ```python
-from event_bus import Middleware
+from infinity_bus import Middleware
 
 class CustomMiddleware(Middleware):
     async def on_setup(self, bus): ...

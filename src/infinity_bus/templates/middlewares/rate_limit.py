@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     BeforePublishNext,
     Event,
     EventBus,

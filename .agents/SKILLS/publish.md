@@ -20,7 +20,7 @@
    git branch
    ```
 
-2. **更新版本号** — 编辑 `pyproject.toml` 中的版本字段（如项目在 `src/event_bus/__init__.py` 维护 `__version__`，一并更新），遵循 [SemVer](https://semver.org/lang/zh-CN/)：
+2. **更新版本号** — 编辑 `pyproject.toml` 中的版本字段（如项目在 `src/infinity_bus/__init__.py` 维护 `__version__`，一并更新），遵循 [SemVer](https://semver.org/lang/zh-CN/)：
 
    | 类型 | 场景 | 示例 |
    | - | - | - |
@@ -31,7 +31,7 @@
 3. **本地最终验证** — 按 pre-commit-check 技能全量验证：
 
    ```bash
-   uv run pytest --cov=event_bus --cov-fail-under=90 -q
+   uv run pytest --cov=infinity_bus --cov-fail-under=90 -q
    ```
 
 4. **同步工程基准快照**（如项目维护基准文档）— 以本次全量验证输出为准，更新测试数 / 覆盖率 / 版本基准等内容。

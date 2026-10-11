@@ -1,6 +1,6 @@
 # Cross-Process Queues (queues)
 
-`event_bus.templates.queues` provides **cross-process `EventQueue`** implementations:
+`infinity_bus.templates.queues` provides **cross-process `EventQueue`** implementations:
 multiple `EventBus` instances join into **one logical bus** (any publish is received by
 every online member, including the publisher itself), while honoring the `EventQueue`
 **"perfect Event queue" contract** — `Event.data` on both sides of the queue is always a
@@ -15,7 +15,7 @@ validated `BaseModel` instance, so cross-process semantics equal in-process sema
 ## Directory Layout (mirrors code)
 
 ```text
-event_bus.templates.queues/
+infinity_bus.templates.queues/
 ├── queues.md     # this overview
 ├── codec.md      # EventCodec — wire codec (perfect Event contract)
 └── rabbit.md     # rabbit/ — RabbitMQ fanout transport backend (two strategies)
@@ -56,8 +56,8 @@ Thus the bus / middlewares / handlers only ever see perfect Events —
 ## Quick Start
 
 ```python
-from event_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
-from event_bus.templates.queues import EventCodec, RabbitFanoutQueue
+from infinity_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
+from infinity_bus.templates.queues import EventCodec, RabbitFanoutQueue
 
 class PingEvent(EventDeclaration):
     name = 'demo.ping'

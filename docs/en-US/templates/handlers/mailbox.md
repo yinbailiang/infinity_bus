@@ -110,8 +110,8 @@ Loop back to get()
 ### Basic: Serial Event Collection
 
 ```python
-from event_bus import Event, EventBus
-from event_bus.templates import MailboxHandler
+from infinity_bus import Event, EventBus
+from infinity_bus.templates import MailboxHandler
 
 class MyHandler(MailboxHandler):
     def __init__(self):
@@ -179,7 +179,7 @@ class RobustHandler(MailboxHandler):
 ### Voluntary Stop: Business-Driven Exit
 
 ```python
-from event_bus.templates import MailboxHandler, StopMailbox
+from infinity_bus.templates import MailboxHandler, StopMailbox
 
 class DrainThenStopHandler(MailboxHandler):
     """ends the consumption loop after a stop command"""

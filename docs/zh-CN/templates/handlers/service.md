@@ -107,9 +107,9 @@ handle() → 按事件名查表 → 校验 payload 类型
 
 ```python
 from pydantic import Field
-from event_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
-from event_bus.templates import ServiceHandler, process
-from event_bus.templates.request import RequestProtocol, ResponseProtocol, request
+from infinity_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
+from infinity_bus.templates import ServiceHandler, process
+from infinity_bus.templates.request import RequestProtocol, ResponseProtocol, request
 
 # 1. 定义请求 / 响应负载与事件
 class GetUserReq(RequestProtocol):

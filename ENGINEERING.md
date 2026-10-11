@@ -168,7 +168,7 @@ uv run pre-commit run --all-files   # 手动全量运行
 ### 目录结构
 
 ```text
-src/event_bus/
+src/infinity_bus/
 ├── __init__.py           公开 API 入口
 ├── event.py              事件系统（Event / Declaration / Registry）
 ├── handler.py            处理器系统（EventHandler / Registry / 生命周期钩子）

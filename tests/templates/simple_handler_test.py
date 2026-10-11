@@ -10,7 +10,7 @@ from typing import AsyncGenerator
 import pytest
 from pydantic import BaseModel, Field
 
-from event_bus import (
+from infinity_bus import (
     EventBus,
     EventDeclaration,
     EventHandler,
@@ -19,7 +19,7 @@ from event_bus import (
     InMemoryEventQueue,
     InMemoryEventQueueConfig,
 )
-from event_bus.templates import handler
+from infinity_bus.templates import handler
 
 
 # ---------------------------------------------------------------------------

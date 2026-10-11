@@ -25,7 +25,7 @@
 | --- | --- |
 | 项目元数据、依赖、工具配置 | `pyproject.toml` |
 | 对外说明与用法 | `README.md` |
-| 实际代码结构与实现 | `src/event_bus/` |
+| 实际代码结构与实现 | `src/infinity_bus/` |
 | 测试范例与共享 fixture | `tests/` |
 | `ENGINEERING.md` | 工程质量标准与指标 |
 | `CONTRIBUTING.md` | 贡献流程与提交规范 |
@@ -35,7 +35,7 @@
 
 **每一项代码变更必须依次完成以下三步，缺一不可：**
 
-1. **改代码** — 修改 `src/event_bus/` 中的实现
+1. **改代码** — 修改 `src/infinity_bus/` 中的实现
 2. **写测试** — 在 `tests/` 镜像路径下编写对应测试，覆盖新功能/边界/异常
 3. **同步文档** — 更新 docstring、README 与 `__all__` 导出
 
@@ -45,9 +45,9 @@
 
 以下原则为项目根基，任何情况下不得违反：
 
-1. **Pyright strict 零遮蔽** — `src/event_bus/` 目录下绝对禁止 `# type: ignore` 或 `# pyright: ignore` 注释
+1. **Pyright strict 零遮蔽** — `src/infinity_bus/` 目录下绝对禁止 `# type: ignore` 或 `# pyright: ignore` 注释
 2. **完整类型注解** — 所有公开 API 必须有完整参数、返回值、泛型注解
-3. **镜像测试** — `tests/` 目录结构与 `src/event_bus/` 一一对应
+3. **镜像测试** — `tests/` 目录结构与 `src/infinity_bus/` 一一对应
 
 ## 代码约定
 

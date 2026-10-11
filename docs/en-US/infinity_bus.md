@@ -69,7 +69,7 @@ before_publish chain (Middleware 1 → 2 → ... → core)
 ```python
 import asyncio
 from pydantic import BaseModel
-from event_bus import (
+from infinity_bus import (
     EventBus, EventDeclaration, EventHandler,
     EventRegistry, EventHandlerRegistry,
 )
@@ -145,8 +145,8 @@ async with bus:
 
 | Event Name | Trigger | Payload Type | Purpose |
 | - | - | - | - |
-| `event_bus.__shutdown__` | When the bus begins stopping | None | Notify handlers to perform cleanup |
-| `event_bus.__task_error__` | When a handler execution fails | `TaskErrorPayload` | Error monitoring and alerting |
+| `infinity_bus.__shutdown__` | When the bus begins stopping | None | Notify handlers to perform cleanup |
+| `infinity_bus.__task_error__` | When a handler execution fails | `TaskErrorPayload` | Error monitoring and alerting |
 
 ---
 

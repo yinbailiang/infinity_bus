@@ -1,6 +1,6 @@
 # 处理器模板（handlers）
 
-`event_bus.templates.handlers` 提供**两种开箱即用的处理器基类**，覆盖事件消费的两种典型模式：
+`infinity_bus.templates.handlers` 提供**两种开箱即用的处理器基类**，覆盖事件消费的两种典型模式：
 
 - **`MailboxHandler`** —— 邮箱模式：事件先入队，由独立后台任务串行消费（背压控制、自定义循环、异常自动重启、主动停止）。
 - **`ServiceHandler`** —— 服务处理器：把请求-响应（RPC）服务端的样板代码收敛为 `@process` 装饰器。
@@ -13,7 +13,7 @@
 ## 目录结构（镜像代码）
 
 ```text
-event_bus.templates.handlers/
+infinity_bus.templates.handlers/
 ├── handlers.md     # 本总览
 ├── mailbox.md      # MailboxHandler —— 邮箱模式处理器
 └── service.md      # ServiceHandler —— 服务处理器（RPC 服务端）
@@ -58,7 +58,7 @@ event_bus.templates.handlers/
 ### 邮箱模式（串行消费）
 
 ```python
-from event_bus.templates import MailboxHandler
+from infinity_bus.templates import MailboxHandler
 
 class SerialCollector(MailboxHandler):
     def __init__(self):
@@ -74,7 +74,7 @@ class SerialCollector(MailboxHandler):
 ### 服务处理器（RPC 服务端）
 
 ```python
-from event_bus.templates import ServiceHandler, process
+from infinity_bus.templates import ServiceHandler, process
 
 class UserService(ServiceHandler):
     @process(GetUserReqEvent, GetUserRespEvent)
@@ -89,7 +89,7 @@ class UserService(ServiceHandler):
 ## 全部导出
 
 ```python
-from event_bus.templates import (
+from infinity_bus.templates import (
     # 邮箱模式
     MailboxHandler, MailboxConfig, StopMailbox,
     # 服务处理器

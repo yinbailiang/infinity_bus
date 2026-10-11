@@ -96,8 +96,8 @@ Setting `max_chain_length=10` can intercept sooner in such scenarios.
 ### Basic Guard
 
 ```python
-from event_bus.templates.middlewares import RecursionGuardMiddleware
-from event_bus import MiddlewareChain
+from infinity_bus.templates.middlewares import RecursionGuardMiddleware
+from infinity_bus import MiddlewareChain
 
 # Default config: same source max 3 appearances, chain max 50
 mw = RecursionGuardMiddleware()

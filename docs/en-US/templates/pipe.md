@@ -14,7 +14,7 @@ Typical use cases include:
 - Simulating bidirectional RPC channels in test frameworks.
 - Extending synchronous request-response models into persistent bidirectional streams.
 
-This module depends on [EventBus](../event_bus.md) for underlying message routing, and
+This module depends on [EventBus](../infinity_bus.md) for underlying message routing, and
 reuses the `request` and `expect` templates for the handshake protocol.
 
 ---

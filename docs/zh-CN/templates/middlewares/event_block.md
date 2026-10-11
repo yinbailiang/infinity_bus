@@ -99,7 +99,7 @@ sequenceDiagram
 屏蔽指定事件名：
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventBlockMiddleware,
     make_blocklist_predicate,
 )
@@ -114,7 +114,7 @@ mw = EventBlockMiddleware(pred, block_reason="debug events disabled in productio
 仅允许白名单中的事件通过：
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventBlockMiddleware,
     make_allowlist_predicate,
 )
@@ -143,7 +143,7 @@ mw = EventBlockMiddleware(block_negative_amount, block_reason="negative amount")
 先转换事件名，再基于新名称屏蔽：
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventBlockMiddleware,
     EventTransformMiddleware,
     make_blocklist_predicate,
@@ -170,7 +170,7 @@ chain.add(EventBlockMiddleware(
 2. **不计入速率**：被屏蔽的事件不消耗 `RateLimitMiddleware` 的配额（因为它在中间件链之后）。
 3. **日志级别**：屏蔽日志为 `DEBUG` 级别，生产环境建议配置合适的日志级别避免噪音。
 4. **判定函数应无副作用**：判定函数可能被多次调用，避免在内部修改全局状态。
-5. **白名单陷阱**：`make_allowlist_predicate` 会屏蔽**所有**未列出的系统事件（如 `event_bus.__shutdown__`），使用时需将必要的系统事件加入白名单。
+5. **白名单陷阱**：`make_allowlist_predicate` 会屏蔽**所有**未列出的系统事件（如 `infinity_bus.__shutdown__`），使用时需将必要的系统事件加入白名单。
 
 ---
 

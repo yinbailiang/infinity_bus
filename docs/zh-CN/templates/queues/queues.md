@@ -1,6 +1,6 @@
 # 跨进程队列（queues）
 
-`event_bus.templates.queues` 提供**跨进程 EventQueue**：把多个 `EventBus` 连成
+`infinity_bus.templates.queues` 提供**跨进程 EventQueue**：把多个 `EventBus` 连成
 **一个逻辑总线**（任一发布 → 所有在线成员收到，含自收），并满足 `EventQueue` 的
 **「完美 Event 队列」契约** —— 队列两侧的 `Event.data` 始终是已校验的 `BaseModel`
 实例，跨进程语义与单进程一致。
@@ -13,7 +13,7 @@
 ## 目录结构（镜像代码）
 
 ```text
-event_bus.templates.queues/
+infinity_bus.templates.queues/
 ├── queues.md     # 本总览
 ├── codec.md      # EventCodec —— 线格式编解码（完美 Event 契约）
 └── rabbit.md     # rabbit/ —— RabbitMQ fanout 传输后端（双策略）
@@ -51,8 +51,8 @@ event_bus.templates.queues/
 ## 快速使用
 
 ```python
-from event_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
-from event_bus.templates.queues import EventCodec, RabbitFanoutQueue
+from infinity_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
+from infinity_bus.templates.queues import EventCodec, RabbitFanoutQueue
 
 class PingEvent(EventDeclaration):
     name = 'demo.ping'

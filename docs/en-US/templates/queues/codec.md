@@ -24,8 +24,8 @@ before put, decode + rebuild before get).
 ## API
 
 ```python
-from event_bus import EventRegistry
-from event_bus.templates.queues import EventCodec
+from infinity_bus import EventRegistry
+from infinity_bus.templates.queues import EventCodec
 
 codec = EventCodec(registry)     # registry: name → EventDeclaration (with payload_type)
 blob = codec.encode(event)       # perfect Event → bytes (UTF-8 JSON envelope)

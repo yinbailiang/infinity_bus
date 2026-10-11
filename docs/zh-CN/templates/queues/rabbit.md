@@ -1,6 +1,6 @@
 # RabbitMQ fanout 队列（queues/rabbit）
 
-`RabbitFanoutQueue`（`event_bus.templates.queues.rabbit.queue`）是基于 **RabbitMQ
+`RabbitFanoutQueue`（`infinity_bus.templates.queues.rabbit.queue`）是基于 **RabbitMQ
 fanout exchange** 的跨进程 `EventQueue`：多个 `EventBus` 注入同一 fanout 后表现为
 **一个逻辑总线**（任一发布 → 所有在线成员收到，含自收）。
 
@@ -14,8 +14,8 @@ fanout exchange** 的跨进程 `EventQueue`：多个 `EventBus` 注入同一 fan
 ## 拓扑
 
 ```text
-fanout exchange 'event_bus.fanout'（durable）
-每个成员 = 一条 durable 命名队列 'event_bus.fanout.<member_id>'（非 exclusive/auto-delete）
+fanout exchange 'infinity_bus.fanout'（durable）
+每个成员 = 一条 durable 命名队列 'infinity_bus.fanout.<member_id>'（非 exclusive/auto-delete）
           绑定到 exchange → broker 为每成员维护独立 backlog（补投的载体）
 ```
 
@@ -78,8 +78,8 @@ q = await RabbitFanoutQueue.create(
 ## 示例
 
 ```python
-from event_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
-from event_bus.templates.queues.rabbit import RabbitFanoutQueue
+from infinity_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
+from infinity_bus.templates.queues.rabbit import RabbitFanoutQueue
 
 class PingEvent(EventDeclaration):
     name = 'demo.ping'

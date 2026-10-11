@@ -268,7 +268,7 @@ Actual queue drain timeout = `max(queue_timeout_min, min(queue_timeout_max, queu
 
 ```python
 class ShutdownEvent(EventDeclaration):
-    name = 'event_bus.__shutdown__'
+    name = 'infinity_bus.__shutdown__'
     # payload_type = None (no payload)
 ```
 
@@ -286,7 +286,7 @@ class TaskErrorPayload(BaseModel):
     error_message: str
 
 class TaskErrorEvent(EventDeclaration):
-    name = 'event_bus.__task_error__'
+    name = 'infinity_bus.__task_error__'
     payload_type = TaskErrorPayload
 ```
 
@@ -296,7 +296,7 @@ Use this for centralized error monitoring.
 ```python
 class ErrorMonitor(EventHandler):
     def __init__(self):
-        super().__init__(["event_bus.__task_error__"])
+        super().__init__(["infinity_bus.__task_error__"])
 
     async def handle(self, payload, bus_proxy, raw_event):
         if isinstance(payload, TaskErrorPayload):
@@ -315,7 +315,7 @@ class ErrorMonitor(EventHandler):
 ### Basic Assembly & Startup
 
 ```python
-from event_bus import EventBus, EventRegistry, EventHandlerRegistry
+from infinity_bus import EventBus, EventRegistry, EventHandlerRegistry
 
 # 1. Declare events
 class MyPayload(BaseModel):

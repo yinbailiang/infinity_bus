@@ -10,7 +10,7 @@ from typing import Any, AsyncGenerator
 import pytest
 from pydantic import BaseModel, Field
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventDeclaration,
@@ -19,13 +19,13 @@ from event_bus import (
     InMemoryEventQueue,
     InMemoryEventQueueConfig,
 )
-from event_bus.templates.handlers.service import (
+from infinity_bus.templates.handlers.service import (
     ConflictError,
     InvalidRequestError,
     ServiceHandler,
     process,
 )
-from event_bus.templates.request import RequestProtocol, ResponseProtocol, request
+from infinity_bus.templates.request import RequestProtocol, ResponseProtocol, request
 
 
 # ---------------------------------------------------------------------------

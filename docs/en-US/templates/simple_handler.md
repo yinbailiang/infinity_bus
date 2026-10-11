@@ -63,8 +63,8 @@ The decorator performs signature validation at **definition time**:
 ### Basic: No-Payload Event
 
 ```python
-from event_bus import EventDeclaration
-from event_bus.templates import handler
+from infinity_bus import EventDeclaration
+from infinity_bus.templates import handler
 
 class SystemReady(EventDeclaration):
     name = "system.ready"
@@ -81,8 +81,8 @@ handler_registry.register(on_system_ready())
 
 ```python
 from pydantic import BaseModel, Field
-from event_bus import EventDeclaration
-from event_bus.templates import handler
+from infinity_bus import EventDeclaration
+from infinity_bus.templates import handler
 
 class UserCreatedPayload(BaseModel):
     user_id: str = Field(description="User ID")
@@ -149,7 +149,7 @@ def another_bad(payload: OtherPayload) -> None:
 ### With ModuleHandlerRegister
 
 ```python
-from event_bus.templates import ModuleHandlerRegister, handler
+from infinity_bus.templates import ModuleHandlerRegister, handler
 
 module_handlers = ModuleHandlerRegister("user_module")
 

@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, Set
 
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     BeforePublishNext,
     Event,
     EventBus,

@@ -52,7 +52,7 @@ class EventDeclaration(ABC):
 ```python
 from pydantic import BaseModel
 from datetime import datetime
-from event_bus import EventDeclaration
+from infinity_bus import EventDeclaration
 
 class UserLoginPayload(BaseModel):
     user_id: str

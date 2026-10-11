@@ -10,14 +10,14 @@ from typing import Any, List, Literal, Optional
 import pytest
 from conftest import BusTestPayload, TestEventDecl
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventHandler,
     EventHandlerRegistry,
     EventRegistry,
 )
-from event_bus.templates.queues import RabbitFanoutQueue
+from infinity_bus.templates.queues import RabbitFanoutQueue
 
 pytestmark = pytest.mark.slow
 
@@ -37,7 +37,7 @@ async def _probe(url: str) -> bool:
 @pytest.fixture(scope='module')
 def rabbit_url() -> str:
     """broker URL；不可达则跳过整个模块。"""
-    from event_bus.templates.queues.rabbit import URL
+    from infinity_bus.templates.queues.rabbit import URL
 
     if not asyncio.run(_probe(URL)):
         pytest.skip('RabbitMQ broker 不可用（请先启动 rabbitmq-server）')
@@ -48,7 +48,7 @@ async def _purge(member_id: str, url: str) -> None:
     """删除成员持久队列（含积压），保证测试干净。"""
     import aio_pika
 
-    from event_bus.templates.queues.rabbit import EXCHANGE
+    from infinity_bus.templates.queues.rabbit import EXCHANGE
 
     conn = await aio_pika.connect(url)
     channel = await conn.channel()

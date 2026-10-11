@@ -83,8 +83,8 @@ sequenceDiagram
 所有事件共享每秒 100 次的限制：
 
 ```python
-from event_bus.templates.middlewares import RateLimitMiddleware
-from event_bus import MiddlewareChain
+from infinity_bus.templates.middlewares import RateLimitMiddleware
+from infinity_bus import MiddlewareChain
 
 mw = RateLimitMiddleware(max_requests=100, window_seconds=1.0)
 chain = MiddlewareChain()
@@ -117,7 +117,7 @@ print(mw.current_rate)
 先限流再转换，确保转换逻辑只对通过限流的事件生效：
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     RateLimitMiddleware,
     EventTransformMiddleware,
     make_field_inject_transform,

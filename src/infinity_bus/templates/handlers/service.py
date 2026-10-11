@@ -8,8 +8,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
-from event_bus import Event, EventBus, EventDeclaration, EventHandler
-from event_bus.templates.request import RequestProtocol, ResponseProtocol, build_response
+from infinity_bus import Event, EventBus, EventDeclaration, EventHandler
+from infinity_bus.templates.request import RequestProtocol, ResponseProtocol, build_response
 
 logger = logging.getLogger(__name__)
 

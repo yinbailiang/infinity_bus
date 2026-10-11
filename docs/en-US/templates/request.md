@@ -45,8 +45,8 @@ declare corresponding events.
 
 ```python
 from pydantic import BaseModel, Field
-from event_bus import EventDeclaration
-from event_bus.templates import RequestProtocol, ResponseProtocol, build_response
+from infinity_bus import EventDeclaration
+from infinity_bus.templates import RequestProtocol, ResponseProtocol, build_response
 
 # Define payloads
 class GetUserRequest(RequestProtocol):
@@ -110,7 +110,7 @@ class GetUserHandler(EventHandler):
 The client calls the `request` function to make a call and wait for the response.
 
 ```python
-from event_bus.templates.request import request
+from infinity_bus.templates.request import request
 
 # Assuming an EventBus.Proxy instance is available (injected or created by the bus)
 proxy = bus.proxy(source="UserServiceClient")

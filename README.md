@@ -18,7 +18,8 @@
 - [✨ Features](#-features)
 - [🔍 Comparison](#-comparison)
 - [📦 Installation](#-installation)
-- [🚀 Quick Start](#-quick-start)
+- [� Migration from v4](#-migration-from-v4)
+- [�🚀 Quick Start](#-quick-start)
 - [🧱 Architecture](#-architecture)
 - [📚 Documentation](#-documentation)
 - [🧪 Testing](#-testing)
@@ -114,7 +115,24 @@ cd event_bus
 uv sync --extra dev
 ```
 
-## 🚀 Quick Start
+## � Migration from v4
+
+Starting with **v5.0.0**, the import package was renamed from `event_bus` to `infinity_bus`
+(the PyPI distribution name remains `infinity_bus`). There is no compatibility alias —
+update your imports when upgrading:
+
+| v4 | v5 |
+| - | - |
+| `from event_bus import EventBus` | `from infinity_bus import EventBus` |
+| `from event_bus.templates import handler` | `from infinity_bus.templates import handler` |
+| System events `event_bus.__shutdown__` / `event_bus.__task_error__` | `infinity_bus.__shutdown__` / `infinity_bus.__task_error__` |
+| Metrics `event_bus_publish_total`, `event_bus_queue_size`, ... | `infinity_bus_publish_total`, `infinity_bus_queue_size`, ... |
+| RabbitMQ exchange `event_bus.fanout` | `infinity_bus.fanout` |
+| Logger names `event_bus.*` | `infinity_bus.*` |
+
+Class/function names and behavior are unchanged.
+
+## �🚀 Quick Start
 
 ### Basic Pub/Sub
 
@@ -124,11 +142,11 @@ uv sync --extra dev
 ```python
 import asyncio
 from pydantic import BaseModel
-from event_bus import (
+from infinity_bus import (
     EventBus, EventDeclaration,
     EventRegistry, EventHandlerRegistry,
 )
-from event_bus.templates import handler
+from infinity_bus.templates import handler
 
 # 1. Define payload
 class MyPayload(BaseModel):
@@ -166,11 +184,11 @@ asyncio.run(main())
 ```python
 import asyncio
 from pydantic import BaseModel
-from event_bus import (
+from infinity_bus import (
     EventBus, EventDeclaration, EventHandler,
     EventRegistry, EventHandlerRegistry,
 )
-from event_bus.templates.request import (
+from infinity_bus.templates.request import (
     request, RequestProtocol, ResponseProtocol,
 )
 
@@ -254,7 +272,7 @@ asyncio.run(main())
 
 | Document | Content |
 | - | - |
-| [Core Overview](docs/en-US/event_bus.md) | Event / EventDeclaration / EventHandler / EventBus / Middleware core concepts |
+| [Core Overview](docs/en-US/infinity_bus.md) | Event / EventDeclaration / EventHandler / EventBus / Middleware core concepts |
 | [Middleware System](docs/en-US/middleware.md) | `Middleware` base class, `MiddlewareChain` onion pipeline |
 | [Advanced Templates](docs/en-US/templates/templates.md) | `expect`, `request`, `pipe`, `register` — the four major templates |
 | [Built-in Middlewares](docs/en-US/templates/middlewares/middlewares.md) | Logging, rate limiting, transform, block, recursion guard |

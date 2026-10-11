@@ -8,7 +8,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from event_bus import Event, EventBus, EventHandler, Regex
+from infinity_bus import Event, EventBus, EventHandler, Regex
 
 logger = logging.getLogger(__name__)
 

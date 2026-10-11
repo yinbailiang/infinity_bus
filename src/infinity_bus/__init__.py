@@ -1,4 +1,4 @@
-"""event_bus - 基于 asyncio 的轻量级事件总线"""
+"""infinity_bus - 基于 asyncio 的轻量级事件总线"""
 
 __version__ = '4.1.0'
 

@@ -4,8 +4,8 @@ kit_version = 1
 [project]
 name = "InfinityBus"
 summary = "强类型、可扩展的异步事件总线（Python 3.12+）"
-package = "event_bus"
-src_dir = "src/event_bus"
+package = "infinity_bus"
+src_dir = "src/infinity_bus"
 repo_url = "https://github.com/yinbailiang/event_bus"
 pypi_name = "infinity_bus"
 extra_sources = [
@@ -19,9 +19,9 @@ setup = "uv sync --extra dev && uv run pre-commit install"
 lint = "uv run ruff check ."
 format = "uv run ruff format ."
 typecheck = "uv run pyright"
-test = "uv run pytest --cov=event_bus --cov-fail-under=90 -q"
+test = "uv run pytest --cov=infinity_bus --cov-fail-under=90 -q"
 extras = [
-  "uv run interrogate src/event_bus/ :: 公开 API docstring 覆盖率检查",
+  "uv run interrogate src/infinity_bus/ :: 公开 API docstring 覆盖率检查",
   "uv run agent-kit update --check :: 规则漂移检查（AGENT.md 与 .agents/ 须与模板一致）",
 ]
 

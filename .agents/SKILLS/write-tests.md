@@ -11,4 +11,4 @@
 
 ## 验证
 
-运行 `uv run pytest --cov=event_bus --cov-fail-under=90 -q`，确保新增测试与全量测试全部通过。
+运行 `uv run pytest --cov=infinity_bus --cov-fail-under=90 -q`，确保新增测试与全量测试全部通过。

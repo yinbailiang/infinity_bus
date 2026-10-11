@@ -1,6 +1,6 @@
 # 幂等（idempotency）
 
-`event_bus.templates.idempotency` 提供**可注入的幂等机制**：以事件自带唯一
+`infinity_bus.templates.idempotency` 提供**可注入的幂等机制**：以事件自带唯一
 `Event.id`（uuid4 hex）为去重键，记录「已处理标记」，让 at-least-once 语义下的重复
 投递只被处理一次。
 
@@ -42,7 +42,7 @@ class IdempotencyRecorder(Protocol):
 继承它并实现 `handle`，幂等语义自动生效：
 
 ```python
-from event_bus.templates.idempotency import IdempotentHandler
+from infinity_bus.templates.idempotency import IdempotentHandler
 
 class MyHandler(IdempotentHandler):
     def __init__(self, recorder, consumer):
@@ -79,7 +79,7 @@ mark_processed   不标记（留给 at-least-once 重投重试）
 ### SQLite 持久版
 
 ```python
-from event_bus.templates.idempotency import SqliteIdempotencyRecorder
+from infinity_bus.templates.idempotency import SqliteIdempotencyRecorder
 
 recorder = SqliteIdempotencyRecorder('processed.db')  # 或 ':memory:'
 await recorder.start()
@@ -97,7 +97,7 @@ finally:
 ## 示例：注入到消费方
 
 ```python
-from event_bus.templates.idempotency import (
+from infinity_bus.templates.idempotency import (
     IdempotentHandler,
     InMemoryIdempotencyRecorder,
 )

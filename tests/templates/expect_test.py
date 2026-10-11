@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventDeclaration,
@@ -15,7 +15,7 @@ from event_bus import (
     InMemoryEventQueueConfig,
     Regex,
 )
-from event_bus.templates import OneShotEventHandler, expect
+from infinity_bus.templates import OneShotEventHandler, expect
 
 
 # ---------------------------------------------------------------------------

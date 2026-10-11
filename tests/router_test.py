@@ -9,7 +9,7 @@ from typing import Callable, Optional, Type
 
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventDeclaration,

@@ -24,8 +24,8 @@
 ## API
 
 ```python
-from event_bus import EventRegistry
-from event_bus.templates.queues import EventCodec
+from infinity_bus import EventRegistry
+from infinity_bus.templates.queues import EventCodec
 
 codec = EventCodec(registry)     # registry: name → EventDeclaration（含 payload_type）
 blob = codec.encode(event)       # 完美 Event → bytes（UTF-8 JSON 信封）
@@ -56,8 +56,8 @@ event = codec.decode(blob)       # bytes → 完美 Event（data 重建为校验
 # 单独使用（负载重建示例）
 from pydantic import BaseModel
 
-from event_bus import Event, EventDeclaration, EventRegistry
-from event_bus.templates.queues import EventCodec
+from infinity_bus import Event, EventDeclaration, EventRegistry
+from infinity_bus.templates.queues import EventCodec
 
 class MyPayload(BaseModel):
     value: int

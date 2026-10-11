@@ -14,11 +14,11 @@
 
 | 指标名 | 类型 | 说明 |
 | - | - | - |
-| `event_bus_publish_total` | Counter | 按事件名统计发布次数（含失败尝试） |
-| `event_bus_publish_duration` | Histogram | 发布耗时（before_publish → on_publish 结束） |
-| `event_bus_publish_errors_total` | Counter | 发布失败次数 |
-| `event_bus_queue_size` | Gauge | 当前事件队列深度 |
-| `event_bus_active_tasks` | Gauge | 当前活跃处理器任务数 |
+| `infinity_bus_publish_total` | Counter | 按事件名统计发布次数（含失败尝试） |
+| `infinity_bus_publish_duration` | Histogram | 发布耗时（before_publish → on_publish 结束） |
+| `infinity_bus_publish_errors_total` | Counter | 发布失败次数 |
+| `infinity_bus_queue_size` | Gauge | 当前事件队列深度 |
+| `infinity_bus_active_tasks` | Gauge | 当前活跃处理器任务数 |
 
 ---
 
@@ -125,8 +125,8 @@ sequenceDiagram
 ### 纯内存模式
 
 ```python
-from event_bus.templates.middlewares import MetricsMiddleware
-from event_bus import MiddlewareChain
+from infinity_bus.templates.middlewares import MetricsMiddleware
+from infinity_bus import MiddlewareChain
 
 metrics = MetricsMiddleware()
 chain = MiddlewareChain()
@@ -179,7 +179,7 @@ reader = PeriodicExportingMetricReader(ConsoleMetricExporter())
 provider = MeterProvider(metric_readers=[reader])
 otel_metrics.set_meter_provider(provider)
 
-meter = otel_metrics.get_meter("event_bus")
+meter = otel_metrics.get_meter("infinity_bus")
 
 metrics = MetricsMiddleware()
 metrics.integrate_opentelemetry(meter)
@@ -197,7 +197,7 @@ metrics = MetricsMiddleware(histogram_bounds=(0.01, 0.05, 0.1, 0.5, 1.0, 5.0))
 ### 与其他中间件组合
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     MetricsMiddleware,
     RateLimitMiddleware,
     JSONLLoggingMiddleware,

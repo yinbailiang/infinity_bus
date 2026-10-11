@@ -6,6 +6,6 @@
 
 1. 尽量避免破坏公开 API；无法避免时保留向后兼容，或提供明确的迁移说明
 2. 修改后运行全量类型检查：`uv run pyright`
-3. 修改后运行全量测试：`uv run pytest --cov=event_bus --cov-fail-under=90 -q`
-4. 更新 `src/event_bus/__init__.py` 中的 `__all__` 导出
+3. 修改后运行全量测试：`uv run pytest --cov=infinity_bus --cov-fail-under=90 -q`
+4. 更新 `src/infinity_bus/__init__.py` 中的 `__all__` 导出
 5. 同步更新对应文档与示例

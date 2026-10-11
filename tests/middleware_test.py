@@ -7,7 +7,7 @@ import pytest
 from conftest import SimplePingHandler
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventHandlerRegistry,
@@ -17,7 +17,7 @@ from event_bus import (
     Middleware,
     MiddlewareChain,
 )
-from event_bus.middleware import BeforePublishNext, OnPublishNext
+from infinity_bus.middleware import BeforePublishNext, OnPublishNext
 
 # ============================================================================
 # 测试用中间件实现

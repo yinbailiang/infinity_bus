@@ -85,8 +85,8 @@ root(test) → Handler A 发布(system) → Handler B 发布(system) → Handler
 ### 基础防护
 
 ```python
-from event_bus.templates.middlewares import RecursionGuardMiddleware
-from event_bus import MiddlewareChain
+from infinity_bus.templates.middlewares import RecursionGuardMiddleware
+from infinity_bus import MiddlewareChain
 
 # 默认配置：同一 source 最多出现 3 次，链长最多 50
 mw = RecursionGuardMiddleware()

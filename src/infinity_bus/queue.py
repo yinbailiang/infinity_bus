@@ -37,11 +37,11 @@ class EventQueue(ABC):
     **「完美 Event 队列」契约**：``put`` 的 Event 与 ``get`` 返回的 Event 均满足
     ``Event.data`` 为**已校验 ``BaseModel`` 实例**（或 None）的不变量。内存实现天然
     满足；跨进程实现须在边界完成编解码与按注册表重建（参考
-    :class:`~event_bus.templates.queues.codec.EventCodec`），使总线与处理器只见
+    :class:`~infinity_bus.templates.queues.codec.EventCodec`），使总线与处理器只见
     完美 Event —— 跨进程语义等同单进程语义。
 
     具体实现（进程内 / 持久化 / 优先级 / 跨进程）由调用方构造后注入
-    :class:`~event_bus.bus.EventBus`。
+    :class:`~infinity_bus.bus.EventBus`。
     """
 
     @abstractmethod

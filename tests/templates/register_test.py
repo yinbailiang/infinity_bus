@@ -5,14 +5,14 @@ from typing import Any, Dict, Optional, cast
 import pytest
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     EventDeclaration,
     EventHandler,
     EventHandlerRegistry,
     EventRegistry,
     Router,
 )
-from event_bus.templates.register import ModuleEventRegister, ModuleHandlerRegister
+from infinity_bus.templates.register import ModuleEventRegister, ModuleHandlerRegister
 
 
 class Matcher:

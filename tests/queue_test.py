@@ -6,7 +6,7 @@ from typing import Any, Callable, cast
 import pytest
 from conftest import CountingHandler, wait_for_condition
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventHandlerRegistry,

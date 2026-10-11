@@ -12,7 +12,7 @@ from conftest import (
 )
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     Event,
     EventBus,
     EventDeclaration,
@@ -24,7 +24,7 @@ from event_bus import (
     MiddlewareChain,
     Regex,
 )
-from event_bus.templates import (
+from infinity_bus.templates import (
     EventForwardMiddleware,
     make_bidirectional_forward,
     make_event_name_filter,
@@ -236,12 +236,12 @@ class TestEventForwardMiddleware:
         base_event_registry: EventRegistry,
         handler_registry: EventHandlerRegistry,
     ) -> None:
-        """系统事件（event_bus.*）默认不转发"""
+        """系统事件（infinity_bus.*）默认不转发"""
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
 
         # 同时订阅用户事件和系统事件
-        spy = ForwardSpyHandler(['mw.ping', 'event_bus.__shutdown__', 'event_bus.__task_error__'])
+        spy = ForwardSpyHandler(['mw.ping', 'infinity_bus.__shutdown__', 'infinity_bus.__task_error__'])
         target_handlers.register(spy)
 
         target_bus = EventBus(
@@ -273,7 +273,7 @@ class TestEventForwardMiddleware:
         # 来自转发源的事件中没有系统事件（目标总线自身的生命周期事件除外）
         for i, name in enumerate(spy.received_names):
             if spy.received_sources[i] == 'no-sys-test':
-                assert not name.startswith('event_bus.'), f"system event '{name}' was forwarded but should not be"
+                assert not name.startswith('infinity_bus.'), f"system event '{name}' was forwarded but should not be"
 
     @pytest.mark.asyncio
     async def test_system_events_forwarded_when_enabled(
@@ -285,7 +285,7 @@ class TestEventForwardMiddleware:
 
         # 注册一个自定义系统事件用于测试（无负载）
         class CustomSysEvent(EventDeclaration):
-            name = 'event_bus.custom_test'
+            name = 'infinity_bus.custom_test'
 
         # 源和目标都需要注册该事件
         source_registry = create_event_registry(BASE_EVENT_DECLS)
@@ -295,7 +295,7 @@ class TestEventForwardMiddleware:
         target_registry.register(CustomSysEvent)
 
         target_handlers = EventHandlerRegistry()
-        spy = ForwardSpyHandler(['event_bus.custom_test'])
+        spy = ForwardSpyHandler(['infinity_bus.custom_test'])
         target_handlers.register(spy)
 
         target_bus = EventBus(
@@ -319,11 +319,11 @@ class TestEventForwardMiddleware:
 
         async with target_bus:
             async with source_bus:
-                await source_bus.proxy('src').publish('event_bus.custom_test', None)
+                await source_bus.proxy('src').publish('infinity_bus.custom_test', None)
                 await spy.wait_received(timeout=3.0)
 
         # 系统事件被转发
-        sys_events = [n for n in spy.received_names if n.startswith('event_bus.')]
+        sys_events = [n for n in spy.received_names if n.startswith('infinity_bus.')]
         assert len(sys_events) >= 1
 
     @pytest.mark.asyncio

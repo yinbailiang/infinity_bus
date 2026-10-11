@@ -61,8 +61,8 @@ Each JSONL line contains the following fields:
 ### Usage Examples
 
 ```python
-from event_bus.templates.middlewares import JSONLLoggingMiddleware
-from event_bus import MiddlewareChain
+from infinity_bus.templates.middlewares import JSONLLoggingMiddleware
+from infinity_bus import MiddlewareChain
 
 # Basic usage
 mw = JSONLLoggingMiddleware("events.jsonl")
@@ -138,8 +138,8 @@ CREATE TABLE IF NOT EXISTS event_log (
 ### Usage Examples
 
 ```python
-from event_bus.templates.middlewares import SQLiteLoggingMiddleware
-from event_bus import MiddlewareChain
+from infinity_bus.templates.middlewares import SQLiteLoggingMiddleware
+from infinity_bus import MiddlewareChain
 
 # In-memory database (suitable for testing)
 mw = SQLiteLoggingMiddleware(":memory:")

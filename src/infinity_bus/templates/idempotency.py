@@ -12,7 +12,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Protocol, Union
 
-from event_bus import Event, EventBus, EventHandler, Regex
+from infinity_bus import Event, EventBus, EventHandler, Regex
 
 
 class IdempotencyRecorder(Protocol):

@@ -1,6 +1,6 @@
 # RabbitMQ fanout Queue (queues/rabbit)
 
-`RabbitFanoutQueue` (`event_bus.templates.queues.rabbit.queue`) is a cross-process
+`RabbitFanoutQueue` (`infinity_bus.templates.queues.rabbit.queue`) is a cross-process
 `EventQueue` built on a **RabbitMQ fanout exchange**: multiple `EventBus` instances
 joined on one fanout behave as **one logical bus** (any publish is received by every
 online member, including the publisher).
@@ -17,8 +17,8 @@ online member, including the publisher).
 ## Topology
 
 ```text
-fanout exchange 'event_bus.fanout' (durable)
-each member = one durable named queue 'event_bus.fanout.<member_id>'
+fanout exchange 'infinity_bus.fanout' (durable)
+each member = one durable named queue 'infinity_bus.fanout.<member_id>'
            (not exclusive / auto-delete), bound to the exchange
            → broker keeps an independent backlog per member (replay carrier)
 ```
@@ -85,8 +85,8 @@ q = await RabbitFanoutQueue.create(
 ## Example
 
 ```python
-from event_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
-from event_bus.templates.queues.rabbit import RabbitFanoutQueue
+from infinity_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
+from infinity_bus.templates.queues.rabbit import RabbitFanoutQueue
 
 class PingEvent(EventDeclaration):
     name = 'demo.ping'

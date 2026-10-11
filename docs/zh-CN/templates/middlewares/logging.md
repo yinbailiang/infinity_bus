@@ -56,8 +56,8 @@ class JSONLLoggingMiddleware(Middleware):
 ### 使用示例
 
 ```python
-from event_bus.templates.middlewares import JSONLLoggingMiddleware
-from event_bus import MiddlewareChain
+from infinity_bus.templates.middlewares import JSONLLoggingMiddleware
+from infinity_bus import MiddlewareChain
 
 # 基础用法
 mw = JSONLLoggingMiddleware("events.jsonl")
@@ -130,8 +130,8 @@ CREATE TABLE IF NOT EXISTS event_log (
 ### 使用示例
 
 ```python
-from event_bus.templates.middlewares import SQLiteLoggingMiddleware
-from event_bus import MiddlewareChain
+from infinity_bus.templates.middlewares import SQLiteLoggingMiddleware
+from infinity_bus import MiddlewareChain
 
 # 内存数据库（适合测试）
 mw = SQLiteLoggingMiddleware(":memory:")

@@ -107,9 +107,9 @@ Invoke the processor (sync / async)
 
 ```python
 from pydantic import Field
-from event_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
-from event_bus.templates import ServiceHandler, process
-from event_bus.templates.request import RequestProtocol, ResponseProtocol, request
+from infinity_bus import EventBus, EventDeclaration, EventHandlerRegistry, EventRegistry
+from infinity_bus.templates import ServiceHandler, process
+from infinity_bus.templates.request import RequestProtocol, ResponseProtocol, request
 
 # 1. Request / response payloads and events
 class GetUserReq(RequestProtocol):

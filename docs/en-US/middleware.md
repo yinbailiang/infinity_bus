@@ -232,7 +232,7 @@ Log every published event with timing:
 ```python
 import time
 import logging
-from event_bus import Middleware, MiddlewareChain
+from infinity_bus import Middleware, MiddlewareChain
 
 logger = logging.getLogger(__name__)
 
@@ -361,7 +361,7 @@ class HotReloadHandler(EventHandler):
 ## Custom Middleware Example
 
 ```python
-from event_bus import (
+from infinity_bus import (
     BeforePublishNext, Event, EventBus, EventRegistry,
     Middleware, OnPublishNext,
 )

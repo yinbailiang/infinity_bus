@@ -12,7 +12,7 @@ from typing import Any, List, Optional, Type
 
 from pydantic import BaseModel
 
-from event_bus import Event, EventRegistry
+from infinity_bus import Event, EventRegistry
 
 PayloadType = Type[BaseModel]
 """负载模型类别名：``EventDeclaration.payload_type`` 的类型。"""

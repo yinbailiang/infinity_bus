@@ -1,6 +1,6 @@
 # Handler Templates (handlers)
 
-`event_bus.templates.handlers` ships **two ready-to-use handler base classes** covering the two typical event-consumption patterns:
+`infinity_bus.templates.handlers` ships **two ready-to-use handler base classes** covering the two typical event-consumption patterns:
 
 - **`MailboxHandler`** — mailbox pattern: events are enqueued first and consumed serially by a dedicated task (backpressure, custom loops, automatic restart on crash, voluntary stop).
 - **`ServiceHandler`** — service handler: collapses the request-response (RPC) server-side boilerplate into a `@process` decorator.
@@ -13,7 +13,7 @@ their extra capabilities build on the core handler protocol (lifecycle hooks / s
 ## Directory Layout (mirrors the code)
 
 ```text
-event_bus.templates.handlers/
+infinity_bus.templates.handlers/
 ├── handlers.md     # this overview
 ├── mailbox.md      # MailboxHandler — mailbox-pattern handler
 └── service.md      # ServiceHandler — service handler (RPC server side)
@@ -58,7 +58,7 @@ event_bus.templates.handlers/
 ### Mailbox Pattern (Serial Consumption)
 
 ```python
-from event_bus.templates import MailboxHandler
+from infinity_bus.templates import MailboxHandler
 
 class SerialCollector(MailboxHandler):
     def __init__(self):
@@ -74,7 +74,7 @@ class SerialCollector(MailboxHandler):
 ### Service Handler (RPC Server Side)
 
 ```python
-from event_bus.templates import ServiceHandler, process
+from infinity_bus.templates import ServiceHandler, process
 
 class UserService(ServiceHandler):
     @process(GetUserReqEvent, GetUserRespEvent)
@@ -89,7 +89,7 @@ See [mailbox.md](mailbox.md) and [service.md](service.md) for full usage.
 ## All Exports
 
 ```python
-from event_bus.templates import (
+from infinity_bus.templates import (
     # mailbox
     MailboxHandler, MailboxConfig, StopMailbox,
     # service

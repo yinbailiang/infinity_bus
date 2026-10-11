@@ -5,17 +5,17 @@
 
 收集指标
 --------
-- ``event_bus_publish_total``        Counter   按事件名统计发布次数
-- ``event_bus_publish_duration``     Histogram 发布耗时（before_publish → on_publish 结束）
-- ``event_bus_publish_errors_total`` Counter   发布失败次数
-- ``event_bus_queue_size``           Gauge     当前队列长度
-- ``event_bus_active_tasks``         Gauge     当前活跃处理器任务数
+- ``infinity_bus_publish_total``        Counter   按事件名统计发布次数
+- ``infinity_bus_publish_duration``     Histogram 发布耗时（before_publish → on_publish 结束）
+- ``infinity_bus_publish_errors_total`` Counter   发布失败次数
+- ``infinity_bus_queue_size``           Gauge     当前队列长度
+- ``infinity_bus_active_tasks``         Gauge     当前活跃处理器任务数
 
 纯内存使用
 ----------
 .. code-block:: python
 
-    from event_bus.templates.middlewares import MetricsMiddleware
+    from infinity_bus.templates.middlewares import MetricsMiddleware
 
     metrics = MetricsMiddleware()
     chain = MiddlewareChain()
@@ -46,7 +46,7 @@
 
     from opentelemetry import metrics as otel_metrics
 
-    meter = otel_metrics.get_meter("event_bus")
+    meter = otel_metrics.get_meter("infinity_bus")
     metrics = MetricsMiddleware()
     metrics.integrate_opentelemetry(meter)
 """
@@ -60,7 +60,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from event_bus import (
+from infinity_bus import (
     BeforePublishNext,
     Event,
     EventBus,
@@ -278,34 +278,34 @@ class MetricsMiddleware(Middleware):
         self._prom_registry = registry
 
         self._prom_counter = prometheus_client.Counter(
-            'event_bus_publish_total',
+            'infinity_bus_publish_total',
             '事件发布总次数',
             labelnames=['event_name'],
             registry=registry,
         )
         self._prom_histogram = prometheus_client.Histogram(
-            'event_bus_publish_duration_seconds',
+            'infinity_bus_publish_duration_seconds',
             '事件发布耗时（秒）',
             labelnames=['event_name'],
             buckets=list(self._histogram_bounds),
             registry=registry,
         )
         self._prom_errors = prometheus_client.Counter(
-            'event_bus_publish_errors_total',
+            'infinity_bus_publish_errors_total',
             '事件发布失败次数',
             registry=registry,
         )
 
         # Gauge 通过回调函数采集，每次 scrape 时读取最新值
         self._prom_queue_gauge = prometheus_client.Gauge(
-            'event_bus_queue_size',
+            'infinity_bus_queue_size',
             '事件队列当前深度',
             registry=registry,
         )
         self._prom_queue_gauge.set_function(lambda: self._bus.queue_size if self._bus else 0)
 
         self._prom_tasks_gauge = prometheus_client.Gauge(
-            'event_bus_active_tasks',
+            'infinity_bus_active_tasks',
             '当前活跃处理器任务数',
             registry=registry,
         )
@@ -324,7 +324,7 @@ class MetricsMiddleware(Middleware):
         ----
         meter:
             ``opentelemetry.metrics.Meter`` 实例。
-            若为 ``None``，自动创建名为 ``"event_bus"`` 的 Meter。
+            若为 ``None``，自动创建名为 ``"infinity_bus"`` 的 Meter。
 
         异常
         ----
@@ -340,21 +340,21 @@ class MetricsMiddleware(Middleware):
             raise ImportError('opentelemetry-api 未安装，请执行: pip install opentelemetry-api') from exc
 
         if meter is None:
-            meter = otel_metrics.get_meter('event_bus')
+            meter = otel_metrics.get_meter('infinity_bus')
 
         self._otel_meter = meter
 
         self._otel_counter = meter.create_counter(
-            'event_bus.publish_total',
+            'infinity_bus.publish_total',
             description='事件发布总次数',
         )
         self._otel_histogram = meter.create_histogram(
-            'event_bus.publish_duration',
+            'infinity_bus.publish_duration',
             description='事件发布耗时（秒）',
             unit='s',
         )
         self._otel_errors = meter.create_counter(
-            'event_bus.publish_errors_total',
+            'infinity_bus.publish_errors_total',
             description='事件发布失败次数',
         )
 
@@ -363,7 +363,7 @@ class MetricsMiddleware(Middleware):
             return otel_metrics.Observation(self._bus.queue_size if self._bus else 0)
 
         self._otel_queue_gauge = meter.create_observable_gauge(
-            'event_bus.queue_size',
+            'infinity_bus.queue_size',
             description='事件队列当前深度',
             callbacks=[_queue_callback],
         )
@@ -372,7 +372,7 @@ class MetricsMiddleware(Middleware):
             return otel_metrics.Observation(self._bus.active_task_count if self._bus else 0)
 
         self._otel_tasks_gauge = meter.create_observable_gauge(
-            'event_bus.active_tasks',
+            'infinity_bus.active_tasks',
             description='当前活跃处理器任务数',
             callbacks=[_tasks_callback],
         )

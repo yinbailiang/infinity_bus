@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from conftest import SimplePingHandler
 
-from event_bus import (
+from infinity_bus import (
     EventBus,
     EventHandlerRegistry,
     EventRegistry,
@@ -13,7 +13,7 @@ from event_bus import (
     InMemoryEventQueueConfig,
     MiddlewareChain,
 )
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     EventTransformMiddleware,
     RateLimitMiddleware,
     make_field_inject_transform,

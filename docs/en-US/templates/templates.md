@@ -1,7 +1,7 @@
 # Templates
 
 Advanced patterns built on top of the core event bus. These are optional — import from
-`event_bus.templates` to use them.
+`infinity_bus.templates` to use them.
 
 > Some templates require optional dependencies. Install with:
 >
@@ -72,7 +72,7 @@ Advanced patterns built on top of the core event bus. These are optional — imp
 ## All Exports
 
 ```python
-from event_bus.templates import (
+from infinity_bus.templates import (
     # handler
     'handler',
     # expect
@@ -132,7 +132,7 @@ from event_bus.templates import (
 ## handler
 
 ```python
-from event_bus.templates import handler
+from infinity_bus.templates import handler
 
 @handler(UserCreated)
 async def send_welcome_email(payload: UserCreatedPayload) -> None:
@@ -146,7 +146,7 @@ See [simple_handler.md](simple_handler.md) for signature validation, sync/async 
 ## expect
 
 ```python
-from event_bus.templates import expect
+from infinity_bus.templates import expect
 
 async with expect(bus_proxy, "user.login") as future:
     await bus_proxy.publish("auth.request", {...})
@@ -158,7 +158,7 @@ See [expect.md](expect.md) for filtering, error handling, and advanced usage.
 ## request
 
 ```python
-from event_bus.templates import request
+from infinity_bus.templates import request
 
 response = await request(
     bus_proxy,
@@ -173,10 +173,10 @@ See [request.md](request.md) for protocol definition and error handling.
 
 ## handlers
 
-`event_bus.templates.handlers` ships two handler base classes:
+`infinity_bus.templates.handlers` ships two handler base classes:
 
 ```python
-from event_bus.templates import MailboxHandler, ServiceHandler, process
+from infinity_bus.templates import MailboxHandler, ServiceHandler, process
 
 # Service handler: RPC server side (@process decorator)
 class OrderService(ServiceHandler):
@@ -197,7 +197,7 @@ See [Handlers Overview](handlers/handlers.md) for the comparison and selection g
 ## pipe
 
 ```python
-from event_bus.templates import open_pipe
+from infinity_bus.templates import open_pipe
 
 async with open_pipe(pipe_id="my_pipe") as pipe:
     await pipe.send(MyData(...))
@@ -209,7 +209,7 @@ See [pipe.md](pipe.md) for allocators and multi-process pipes.
 ## register
 
 ```python
-from event_bus.templates import ModuleEventRegister, ModuleHandlerRegister
+from infinity_bus.templates import ModuleEventRegister, ModuleHandlerRegister
 
 events = ModuleEventRegister("orders")
 
@@ -228,7 +228,7 @@ See [register.md](register.md) for atomic registration and error handling.
 See [middlewares/middlewares.md](middlewares/middlewares.md) for full documentation.
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     JSONLLoggingMiddleware,
     RateLimitMiddleware,
     MetricsMiddleware,

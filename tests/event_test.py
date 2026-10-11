@@ -1,6 +1,6 @@
 import pytest
 
-from event_bus import EventDeclaration, EventRegistry
+from infinity_bus import EventDeclaration, EventRegistry
 
 
 @pytest.mark.asyncio

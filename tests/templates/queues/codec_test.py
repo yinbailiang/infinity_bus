@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 
 from conftest import BusTestPayload, TestEventDecl
 
-from event_bus import Event, EventRegistry
-from event_bus.templates.queues import EventCodec
+from infinity_bus import Event, EventRegistry
+from infinity_bus.templates.queues import EventCodec
 
 
 def _registry() -> EventRegistry:

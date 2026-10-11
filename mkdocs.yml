@@ -82,7 +82,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Core:
-      - Overview: event_bus.md
+      - Overview: infinity_bus.md
       - EventBus: bus.md
       - 'Event & Declaration': event.md
       - Handler: handler.md

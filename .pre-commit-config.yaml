@@ -39,7 +39,7 @@ repos:
     hooks:
       - id: pytest-cov
         name: pytest coverage
-        entry: uv run pytest tests/ --cov=event_bus --cov-fail-under=90 -q
+        entry: uv run pytest tests/ --cov=infinity_bus --cov-fail-under=90 -q
         language: system
         pass_filenames: false
         always_run: true
@@ -47,7 +47,7 @@ repos:
 
       - id: interrogate-badge
         name: interrogate badge
-        entry: uv run interrogate src/event_bus/ --generate-badge docs/res/interrogate_badge.svg
+        entry: uv run interrogate src/infinity_bus/ --generate-badge docs/res/interrogate_badge.svg
         language: system
         pass_filenames: false
         always_run: true

@@ -99,7 +99,7 @@ class EventBus:
 ### 注入有界队列（替代旧 `max_queue_size`）
 
 ```python
-from event_bus import EventBus, InMemoryEventQueue, InMemoryEventQueueConfig
+from infinity_bus import EventBus, InMemoryEventQueue, InMemoryEventQueueConfig
 
 # 旧写法: EventBus(reg, hreg, max_queue_size=100)
 queue = InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=100))
@@ -111,7 +111,7 @@ bus = EventBus(reg, hreg, queue=queue)
 只需实现 `EventQueue` 五个方法，即可替换总线内部队列：
 
 ```python
-from event_bus import EventQueue, Event
+from infinity_bus import EventQueue, Event
 
 class PriorityEventQueue(EventQueue):
     """示例：按优先级取件的自定义队列（示意，需自行实现完整协议）"""

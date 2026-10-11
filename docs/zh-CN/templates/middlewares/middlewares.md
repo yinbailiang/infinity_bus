@@ -54,7 +54,7 @@ EventBus 提供了 8 个开箱即用的中间件，覆盖日志、指标、限�
 ## 全部导出
 
 ```python
-from event_bus.templates.middlewares import (
+from infinity_bus.templates.middlewares import (
     # 日志
     JSONLLoggingMiddleware,
     SQLiteLoggingMiddleware,
@@ -96,7 +96,7 @@ from event_bus.templates.middlewares import (
 所有中间件继承 `Middleware` 抽象基类。自定义中间件只需实现所需钩子：
 
 ```python
-from event_bus import Middleware
+from infinity_bus import Middleware
 
 class CustomMiddleware(Middleware):
     async def on_setup(self, bus): ...

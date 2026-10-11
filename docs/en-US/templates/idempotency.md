@@ -1,6 +1,6 @@
 # Idempotency (idempotency)
 
-`event_bus.templates.idempotency` provides an **injectable idempotency mechanism**:
+`infinity_bus.templates.idempotency` provides an **injectable idempotency mechanism**:
 events carry a unique `Event.id` (uuid4 hex) as the dedup key, and a "processed" marker
 is recorded so duplicate deliveries under at-least-once semantics are handled once.
 
@@ -44,7 +44,7 @@ and records its own markers, never interfering with each other.
 Subclass it and implement `handle`; the idempotency semantics apply automatically:
 
 ```python
-from event_bus.templates.idempotency import IdempotentHandler
+from infinity_bus.templates.idempotency import IdempotentHandler
 
 class MyHandler(IdempotentHandler):
     def __init__(self, recorder, consumer):
@@ -81,7 +81,7 @@ mark_processed   not marked (left for at-least-once redelivery)
 ### SQLite persistent
 
 ```python
-from event_bus.templates.idempotency import SqliteIdempotencyRecorder
+from infinity_bus.templates.idempotency import SqliteIdempotencyRecorder
 
 recorder = SqliteIdempotencyRecorder('processed.db')  # or ':memory:'
 await recorder.start()
@@ -100,7 +100,7 @@ primary-key constraint.
 ## Example: inject into a consumer
 
 ```python
-from event_bus.templates.idempotency import (
+from infinity_bus.templates.idempotency import (
     IdempotentHandler,
     InMemoryIdempotencyRecorder,
 )

@@ -4,7 +4,7 @@ from typing import AsyncGenerator, List, Optional, Tuple
 import pytest
 from pydantic import BaseModel
 
-from event_bus import (
+from infinity_bus import (
     EventBus,
     EventDeclaration,
     EventHandlerRegistry,
@@ -12,7 +12,7 @@ from event_bus import (
     InMemoryEventQueue,
     InMemoryEventQueueConfig,
 )
-from event_bus.templates.pipe import (
+from infinity_bus.templates.pipe import (
     InProcessPipe,
     InProcessPipeAllocator,
     Pipe,

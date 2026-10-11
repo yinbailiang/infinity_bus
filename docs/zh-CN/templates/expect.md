@@ -113,7 +113,7 @@ async with expect(bus_proxy, ["order.paid", "order.cancelled"]) as future:
 ### 正则模式匹配
 
 ```python
-from event_bus import Regex
+from infinity_bus import Regex
 
 # 匹配所有以 "notify." 开头的事件
 async with expect(bus_proxy, Regex(r"notify\..*")) as future:

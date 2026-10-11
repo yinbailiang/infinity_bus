@@ -261,7 +261,7 @@ class ShutdownConfig(BaseModel):
 
 ```python
 class ShutdownEvent(EventDeclaration):
-    name = 'event_bus.__shutdown__'
+    name = 'infinity_bus.__shutdown__'
     # payload_type = None (无负载)
 ```
 
@@ -278,7 +278,7 @@ class TaskErrorPayload(BaseModel):
     error_message: str
 
 class TaskErrorEvent(EventDeclaration):
-    name = 'event_bus.__task_error__'
+    name = 'infinity_bus.__task_error__'
     payload_type = TaskErrorPayload
 ```
 
@@ -287,7 +287,7 @@ class TaskErrorEvent(EventDeclaration):
 ```python
 class ErrorMonitor(EventHandler):
     def __init__(self):
-        super().__init__(["event_bus.__task_error__"])
+        super().__init__(["infinity_bus.__task_error__"])
 
     async def handle(self, payload, bus_proxy, raw_event):
         if isinstance(payload, TaskErrorPayload):
@@ -306,7 +306,7 @@ class ErrorMonitor(EventHandler):
 ### 基础组装与启动
 
 ```python
-from event_bus import EventBus, EventRegistry, EventHandlerRegistry
+from infinity_bus import EventBus, EventRegistry, EventHandlerRegistry
 
 # 1. 声明事件
 class MyPayload(BaseModel):

@@ -68,8 +68,8 @@ before_publish 链 (中间件 1 → 2 → ... → 核心)
 ```python
 import asyncio
 from pydantic import BaseModel
-from event_bus import EventBus, EventRegistry, EventHandlerRegistry
-from event_bus import EventDeclaration, EventHandler
+from infinity_bus import EventBus, EventRegistry, EventHandlerRegistry
+from infinity_bus import EventDeclaration, EventHandler
 
 # 1. 声明负载
 class MyPayload(BaseModel):
@@ -132,8 +132,8 @@ asyncio.run(main())
 
 | 事件名 | 触发时机 | 负载类型 | 用途 |
 | - | - | - | - |
-| `event_bus.__shutdown__` | 总线开始停止时 | 无 | 通知处理器执行清理工作 |
-| `event_bus.__task_error__` | 处理器执行失败时 | `TaskErrorPayload` | 错误监控与告警 |
+| `infinity_bus.__shutdown__` | 总线开始停止时 | 无 | 通知处理器执行清理工作 |
+| `infinity_bus.__task_error__` | 处理器执行失败时 | `TaskErrorPayload` | 错误监控与告警 |
 
 ---
 

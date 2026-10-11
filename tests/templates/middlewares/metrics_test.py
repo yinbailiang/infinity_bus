@@ -5,7 +5,7 @@ from typing import Generator
 import pytest
 from conftest import SimplePingHandler
 
-from event_bus import (
+from infinity_bus import (
     EventBus,
     EventHandlerRegistry,
     EventRegistry,
@@ -13,7 +13,7 @@ from event_bus import (
     InMemoryEventQueueConfig,
     MiddlewareChain,
 )
-from event_bus.templates.middlewares import MetricsMiddleware, MetricsSnapshot
+from infinity_bus.templates.middlewares import MetricsMiddleware, MetricsSnapshot
 
 
 @pytest.fixture
@@ -223,7 +223,7 @@ class TestMetricsSnapshot:
         snap = metrics.snapshot()
         assert isinstance(snap, MetricsSnapshot)
         # 系统关闭事件是自动发布的，排除后业务指标为空
-        business = {k: v for k, v in snap.publish_total.items() if not k.startswith('event_bus.__')}
+        business = {k: v for k, v in snap.publish_total.items() if not k.startswith('infinity_bus.__')}
         assert business == {}
         assert snap.publish_errors_total == 0
 
@@ -329,11 +329,11 @@ class TestPrometheusIntegration:
         assert metrics.prometheus_integrated
         # prometheus_client 对 Counter 名自动去掉 _total 后缀（内部名）
         names = {m.name for m in registry.collect()}
-        assert 'event_bus_publish' in names  # Counter 内部名无 _total
-        assert 'event_bus_publish_duration_seconds' in names
-        assert 'event_bus_publish_errors' in names  # Counter 内部名无 _total
-        assert 'event_bus_queue_size' in names
-        assert 'event_bus_active_tasks' in names
+        assert 'infinity_bus_publish' in names  # Counter 内部名无 _total
+        assert 'infinity_bus_publish_duration_seconds' in names
+        assert 'infinity_bus_publish_errors' in names  # Counter 内部名无 _total
+        assert 'infinity_bus_queue_size' in names
+        assert 'infinity_bus_active_tasks' in names
 
     @pytest.mark.asyncio
     async def test_integrate_idempotent(
@@ -380,8 +380,8 @@ class TestPrometheusIntegration:
 
         # 从 registry 收集指标
         samples_by_name: dict[str, float] = {s.name: s.value for m in registry.collect() for s in m.samples}
-        assert samples_by_name.get('event_bus_publish_total', 0) >= 1
-        assert samples_by_name.get('event_bus_publish_duration_seconds_count', 0) >= 1
+        assert samples_by_name.get('infinity_bus_publish_total', 0) >= 1
+        assert samples_by_name.get('infinity_bus_publish_duration_seconds_count', 0) >= 1
 
     @pytest.mark.asyncio
     async def test_error_increments_prometheus_errors(
@@ -410,7 +410,7 @@ class TestPrometheusIntegration:
                 await bus.proxy('test').publish('unknown.event')
 
         samples_by_name = {s.name: s.value for m in registry.collect() for s in m.samples}
-        assert samples_by_name.get('event_bus_publish_errors_total', 0) >= 1
+        assert samples_by_name.get('infinity_bus_publish_errors_total', 0) >= 1
 
     @pytest.mark.asyncio
     async def test_default_registry(
@@ -450,7 +450,7 @@ class TestPrometheusIntegration:
 
         # 停止后 queue_size 应为 0
         samples_by_name = {s.name: s.value for m in registry.collect() for s in m.samples}
-        assert samples_by_name.get('event_bus_queue_size', -1) >= 0
+        assert samples_by_name.get('infinity_bus_queue_size', -1) >= 0
 
 
 # ============================================================================
@@ -577,7 +577,7 @@ class TestOpenTelemetryIntegration:
     async def test_default_meter(
         self,
     ) -> None:
-        """省略 meter 参数时自动创建 'event_bus' Meter。"""
+        """省略 meter 参数时自动创建 'infinity_bus' Meter。"""
         metrics = MetricsMiddleware()
         metrics.integrate_opentelemetry()  # 不传 meter
 
