@@ -61,7 +61,7 @@ ignore-nested-functions = true
 
 | 指标 | 数值 |
 | - | - |
-| 公开 API docstring 覆盖 | **91.6%** |
+| 公开 API docstring 覆盖 | **91.9%** |
 | 最低阈值 | 60% |
 | 文档文件 | 58 篇 `.md` |
 
@@ -72,11 +72,11 @@ ignore-nested-functions = true
 ### 覆盖率
 
 ```text
-391 passed · 5 deselected(slow) · 0 failed · 9.2s
-总覆盖率: 94%（2157 statements / 128 missed）
+422 passed · 5 deselected(slow) · 0 failed · 11.4s
+总覆盖率: 94%（2333 statements / 139 missed）
 ```
 
-14 个模块达到 **100%** 覆盖，最低模块 > 82%。
+14 个模块达到 **100%** 覆盖，最低模块 83%（logging）。
 
 ### 架构
 
@@ -159,9 +159,9 @@ uv run pre-commit run --all-files   # 手动全量运行
 
 | 指标 | 数值 |
 | - | - |
-| 最大单文件 | ~446 行 (`bus.py`) |
-| 模块平均 | ~181 行/文件 |
-| 生产文件数 | 27 个 `.py` |
+| 最大单文件 | ~588 行 (`bus.py`) |
+| 模块平均 | ~199 行/文件 |
+| 生产文件数 | 28 个 `.py` |
 
 每个文件一个职责，打开瞬间看完。新增功能不改旧代码。
 

@@ -18,8 +18,9 @@
 - [✨ Features](#-features)
 - [🔍 Comparison](#-comparison)
 - [📦 Installation](#-installation)
-- [� Migration from v4](#-migration-from-v4)
-- [�🚀 Quick Start](#-quick-start)
+- [Migration from v4](#migration-from-v4)
+- [Migration from v5](#migration-from-v5)
+- [🚀 Quick Start](#-quick-start)
 - [🧱 Architecture](#-architecture)
 - [📚 Documentation](#-documentation)
 - [🧪 Testing](#-testing)
@@ -61,9 +62,9 @@
 | Slow Handler Alert | ❌ | ✅ 15s timeout alert | ❌ | N/A |
 | Recursion Guard | ✅ middleware (configurable) | ✅ built-in (non-configurable) | ❌ | N/A |
 | Logging & Auditing | ✅ JSONL + SQLite (middleware) | ✅ built-in JSONL WAL logging | ❌ no built-in | ⚠️ debug tracing |
-| Test Coverage | ✅ 94% (391 tests) | ✅ 83% (138 tests) | ✅ 94% (43 tests) | ✅ 86% (167 tests) |
+| Test Coverage | ✅ 94% (422 tests) | ✅ 83% (138 tests) | ✅ 94% (43 tests) | ✅ 86% (167 tests) |
 | Python Version | 3.12+ | 3.11+ | 3.12+ | 3.7–3.14 |
-| Baseline Version | v5.0.0 `19b750b` | v1.5.6 `7c09342` | v13.0.1 `5157de2` | v4.0.7 `4ec2c47` |
+| Baseline Version | v6.0.0 `32b43a5` | v1.5.6 `7c09342` | v13.0.1 `5157de2` | v4.0.7 `4ec2c47` |
 
 > **Choose InfinityBus when**: you need a middleware-native architecture — hot-reloadable onion pipeline with 8 built-in middlewares (logging, metrics, rate-limit, transform, block, recursion guard, forwarding); you run pyright strict across the entire codebase with literally zero `# type: ignore` in any production code; you want full production-grade features (backpressure, graceful shutdown, regex subscriptions, Pydantic payload validation) with a single core dependency.
 >
@@ -115,7 +116,7 @@ cd infinity_bus
 uv sync --extra dev
 ```
 
-## � Migration from v4
+## Migration from v4
 
 Starting with **v5.0.0**, the import package was renamed from `event_bus` to `infinity_bus`
 (the PyPI distribution name remains `infinity_bus`). There is no compatibility alias —
@@ -132,7 +133,22 @@ update your imports when upgrading:
 
 Class/function names and behavior are unchanged.
 
-## �🚀 Quick Start
+## Migration from v5
+
+**v6.0.0** aligns the handler lifecycle with middleware: lifecycle hooks are now `async`, and registry methods must be awaited. Update your code as follows:
+
+| v5 | v6 |
+| - | - |
+| `def on_activate(self, bus)` (sync lifecycle hooks) | `async def on_activate(self, bus)` — overrides must `await super().on_activate(bus)` |
+| `handler_registry.register(handler)` | `await handler_registry.register(handler)` |
+| `handler_registry.unregister(id)` / `.clear()` / `.activate(bus)` / `.deactivate()` | `await` every call |
+| `with temporary_handler(...)` | `async with temporary_handler(...)` |
+| `module_handlers.register_all_handlers(registry)` | `await module_handlers.register_all_handlers(registry)` |
+| `start()` re-raises the original startup exception | `start()` raises `BusStartFailed` (clean rollback) or `BusStartRollbackError` (incomplete rollback); catch `BusError` to cover both |
+
+New in v6 (non-breaking additions): middleware task-pipeline hooks (`before_dispatch` / `on_task_start` / `on_task_done`), task-state metrics in `MetricsMiddleware`, and `ShutdownConfig.task_reclaim_delay`.
+
+## 🚀 Quick Start
 
 ### Basic Pub/Sub
 

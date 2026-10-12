@@ -18,8 +18,9 @@
 - [✨ 特性](#-特性)
 - [🔍 同类对比](#-同类对比)
 - [📦 安装](#-安装)
-- [� 从 v4 迁移](#-从-v4-迁移)
-- [�🚀 快速开始](#-快速开始)
+- [从 v4 迁移](#从-v4-迁移)
+- [从 v5 迁移](#从-v5-迁移)
+- [🚀 快速开始](#-快速开始)
 - [🧱 架构](#-架构)
 - [📚 文档](#-文档)
 - [🧪 测试](#-测试)
@@ -61,9 +62,9 @@
 | 慢 handler 告警 | ❌ | ✅ 15s 超时告警 | ❌ | N/A |
 | 防递归 | ✅ 中间件（可配置） | ✅ 内置（不可配置） | ❌ | N/A |
 | 日志与审计 | ✅ JSONL + SQLite（中间件） | ✅ 内置 JSONL WAL 日志 | ❌ 无内置 | ⚠️ 调试追踪 |
-| 测试覆盖 | ✅ 94%（391 tests） | ✅ 83%（138 tests） | ✅ 94%（43 tests） | ✅ 86%（167 tests） |
+| 测试覆盖 | ✅ 94%（422 tests） | ✅ 83%（138 tests） | ✅ 94%（43 tests） | ✅ 86%（167 tests） |
 | Python 版本 | 3.12+ | 3.11+ | 3.12+ | 3.7–3.14 |
-| 基准版本 | v5.0.0 `19b750b` | v1.5.6 `7c09342` | v13.0.1 `5157de2` | v4.0.7 `4ec2c47` |
+| 基准版本 | v6.0.0 `32b43a5` | v1.5.6 `7c09342` | v13.0.1 `5157de2` | v4.0.7 `4ec2c47` |
 
 > **选择 InfinityBus 的理由**：你需要中间件原生架构——可热重载的洋葱管道，内置 8 个中间件（日志、指标、限流、转换、屏蔽、防递归、转发）；你要求整个代码库通过 pyright strict 且生产代码**零 `# type: ignore`**；你希望用单一核心依赖获得完整的生产级特性（背压、优雅停机、正则订阅、Pydantic 负载校验）。
 >
@@ -115,7 +116,7 @@ cd infinity_bus
 uv sync --extra dev
 ```
 
-## � 从 v4 迁移
+## 从 v4 迁移
 
 自 **v5.0.0** 起，导入包名由 `event_bus` 更名为 `infinity_bus`（PyPI 发行名仍为 `infinity_bus`），**不提供**兼容别名。升级时请更新导入：
 
@@ -130,7 +131,22 @@ uv sync --extra dev
 
 类名 / 函数名与行为完全不变。
 
-## �🚀 快速开始
+## 从 v5 迁移
+
+**v6.0.0** 将处理器生命周期与中间件对齐：生命周期钩子全部异步化，注册表方法必须 `await`。升级时请按下表调整：
+
+| v5 | v6 |
+| - | - |
+| `def on_activate(self, bus)`（同步生命周期钩子） | `async def on_activate(self, bus)`——覆写需 `await super().on_activate(bus)` |
+| `handler_registry.register(handler)` | `await handler_registry.register(handler)` |
+| `handler_registry.unregister(id)` / `.clear()` / `.activate(bus)` / `.deactivate()` | 每个调用都需 `await` |
+| `with temporary_handler(...)` | `async with temporary_handler(...)` |
+| `module_handlers.register_all_handlers(registry)` | `await module_handlers.register_all_handlers(registry)` |
+| `start()` 原样重抛原始启动异常 | `start()` 抛出 `BusStartFailed`（回滚完整）或 `BusStartRollbackError`（回滚不完整）；catch `BusError` 可两者兼收 |
+
+v6 新增（非破坏性）：中间件任务管道钩子（`before_dispatch` / `on_task_start` / `on_task_done`）、`MetricsMiddleware` 任务状态指标、`ShutdownConfig.task_reclaim_delay`。
+
+## 🚀 快速开始
 
 ### 基础发布/订阅
 

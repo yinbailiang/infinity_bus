@@ -1,6 +1,6 @@
 # Commit Log — `infinity_bus`
 
-> 共 **139** 个提交 · 25 个版本标签 · 2026-06-07 ~ 2026-10-12
+> 共 **146** 个提交 · 25 个版本标签 · 2026-06-07 ~ 2026-10-12
 
 ## 版本标签
 
@@ -37,6 +37,28 @@
 ## 全部提交
 
 ### 2026-10-12
+
+- **`32b43a5`** `chore: bump version to 6.0.0`
+  - Version bumped 5.0.0 -> 6.0.0 (major: handler lifecycle hooks are now async; registry methods must be awaited; startup failures raise BusError subclasses)
+
+- **`07931d0`** `feat(templates): add task pipeline metrics to MetricsMiddleware`
+  - on_task_done drives task_total (handler x outcome) / task_duration / task_wait metrics; snapshot model extended; Prometheus + OTel instruments bridged
+  - tests: +6 cases incl. bounded-keys & weakref release checks; docs (EN/ZH) metrics.md / middlewares.md synced
+
+- **`5d978f6`** `feat(bus): add configurable task reclaim delay to ShutdownConfig`
+  - task_reclaim_delay lets completion callbacks (and task-error logs) settle before deterministic task reclamation; elapsed lower-bound test locks the wait
+
+- **`97a9d61`** `feat(middleware): add task pipeline hooks and BusError hierarchy`
+  - before_dispatch / on_task_start / on_task_done hooks + TaskRecord / TaskOutcome / DispatchNext; BusError with BusStartFailed (clean rollback) and BusStartRollbackError (incomplete rollback)
+  - fix: deterministic task reclamation on shutdown (cancel-all-then-await; discard completed tasks after a settle yield)
+  - tests: +20 cases incl. hook micro-timing and bus start/stop phase locks; docs (EN/ZH) middleware.md / bus.md / README synced
+
+- **`f7c0818`** `refactor(handler): make lifecycle hooks async to align with middleware`
+  - on_registered / on_unregistered / on_activate / on_deactivate now async; EventHandlerRegistry register/unregister/clear/activate/deactivate must be awaited
+  - temporary_handler -> async context manager; ModuleHandlerRegister.register_all_handlers async; ~200 call sites migrated across 45 files (EN/ZH docs synced)
+
+- **`d238e14`** `fix(bus): setup middleware chain before handler activation on start`
+  - start order mirrors stop cleanup: middleware on_setup before handler activation; publish gate opened last — messages published during handler activation traverse a fully-ready pipeline
 
 - **`19b750b`** `chore: bump version to 5.0.0`
   - Version bumped 4.1.0 -> 5.0.0 (major: import package renamed event_bus -> infinity_bus; no compatibility alias)
