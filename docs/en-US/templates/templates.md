@@ -138,7 +138,7 @@ from infinity_bus.templates import handler
 async def send_welcome_email(payload: UserCreatedPayload) -> None:
     print(f"Welcome, {payload.email}!")
 
-handler_registry.register(send_welcome_email())
+await handler_registry.register(send_welcome_email())
 ```
 
 See [simple_handler.md](simple_handler.md) for signature validation, sync/async support, and custom timeouts.

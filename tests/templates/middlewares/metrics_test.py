@@ -46,7 +46,7 @@ class TestMetricsBasic:
     ) -> None:
         """发布事件后 publish_total 计数递增。"""
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -71,7 +71,7 @@ class TestMetricsBasic:
     ) -> None:
         """发布事件后延迟直方图有记录。"""
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -99,7 +99,7 @@ class TestMetricsBasic:
     ) -> None:
         """不同事件名独立计数。"""
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -237,7 +237,7 @@ class TestMetricsSnapshot:
     ) -> None:
         """快照是只读副本，修改不影响内部状态。"""
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -276,7 +276,7 @@ class TestMetricsCustomBuckets:
         await chain.add(custom)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -366,7 +366,7 @@ class TestPrometheusIntegration:
         await chain.add(metrics)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -519,7 +519,7 @@ class TestOpenTelemetryIntegration:
         await chain.add(metrics)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,

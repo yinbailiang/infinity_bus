@@ -134,7 +134,7 @@ from infinity_bus.templates import handler
 async def send_welcome_email(payload: UserCreatedPayload) -> None:
     print(f"欢迎, {payload.email}!")
 
-handler_registry.register(send_welcome_email())
+await handler_registry.register(send_welcome_email())
 ```
 
 详见 [simple_handler.md](simple_handler.md) 了解签名校验、同步/异步支持和自定义超时。

@@ -73,7 +73,7 @@ class TestEventTransformMiddleware:
                     self._event.set()
 
         watcher = TargetWatcher()
-        handler_registry.register(watcher)
+        await handler_registry.register(watcher)
 
         bus = EventBus(
             base_event_registry,
@@ -102,7 +102,7 @@ class TestEventTransformMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -134,7 +134,7 @@ class TestEventTransformMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -183,7 +183,7 @@ class TestEventTransformMiddleware:
         handler = SimplePingHandler()
         # 修改订阅以匹配转换后的事件名
         handler.subscriptions.replace(['prefix.mw.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,

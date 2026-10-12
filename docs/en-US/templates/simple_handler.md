@@ -74,7 +74,7 @@ async def on_system_ready() -> None:
     print("System is ready!")
 
 # Register with the bus
-handler_registry.register(on_system_ready())
+await handler_registry.register(on_system_ready())
 ```
 
 ### Basic: Payload Event
@@ -96,7 +96,7 @@ class UserCreated(EventDeclaration):
 async def send_welcome_email(payload: UserCreatedPayload) -> None:
     print(f"Sending welcome email to {payload.email}")
 
-handler_registry.register(send_welcome_email())
+await handler_registry.register(send_welcome_email())
 ```
 
 ### Sync Handlers
@@ -107,7 +107,7 @@ def log_user_creation(payload: UserCreatedPayload) -> None:
     # Sync functions work too — the decorator adapts automatically
     print(f"[LOG] User created: {payload.user_id}")
 
-handler_registry.register(log_user_creation())
+await handler_registry.register(log_user_creation())
 ```
 
 ### Custom Timeout

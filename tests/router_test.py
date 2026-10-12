@@ -278,7 +278,7 @@ class TestBusIntegration:
     ) -> None:
         """注册到已运行总线：on_activate 自动登记订阅，事件即被路由"""
         handler = _RecordNameHandler(subscriptions=['test.event'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         await event_bus.proxy('pub').publish('test.event', {'value': 1})
         await _wait_until(lambda: len(handler.received) == 1)
@@ -292,7 +292,7 @@ class TestBusIntegration:
     ) -> None:
         """运行期 replace 自身订阅：live 路由立即切换（动态自订阅）"""
         handler = _RecordNameHandler(subscriptions=['test.event'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         await event_bus.proxy('pub').publish('test.event', {'value': 1})
         await _wait_until(lambda: len(handler.received) == 1)
@@ -311,12 +311,12 @@ class TestBusIntegration:
     ) -> None:
         """注销处理器：on_deactivate 撤销订阅，后续事件不再投递"""
         handler = _RecordNameHandler(subscriptions=['test.event'])
-        hid = handler_registry.register(handler)
+        hid = await handler_registry.register(handler)
 
         await event_bus.proxy('pub').publish('test.event', {'value': 1})
         await _wait_until(lambda: len(handler.received) == 1)
 
-        handler_registry.unregister(hid)
+        await handler_registry.unregister(hid)
 
         await event_bus.proxy('pub').publish('test.event', {'value': 2})
         await asyncio.sleep(0.1)
@@ -333,7 +333,7 @@ class TestBusIntegration:
         bus = EventBus(reg, hreg)
         try:
             await bus.start()
-            hid = hreg.register(handler)  # 运行中注册：空订阅束也应被登记
+            hid = await hreg.register(handler)  # 运行中注册：空订阅束也应被登记
             assert handler.handler_id == hid
             assert handler.subscriptions.is_bound  # 激活 ⟺ 已登记恒成立
 

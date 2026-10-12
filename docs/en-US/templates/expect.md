@@ -163,7 +163,7 @@ async with expect(bus_proxy, Regex(r"notify\..*")) as future:
 ## Internals
 
 - Uses `OneShotEventHandler` for single-fire semantics.
-- Uses `temporary_handler` context manager for automatic handler registration/unregistration.
+- Uses the **async** `temporary_handler` context manager for automatic handler registration/unregistration.
 - Filter exceptions are passed directly to the waiter via `future.set_exception`, keeping
   the bus error channel clean (no `__task_error__` event triggered).
 

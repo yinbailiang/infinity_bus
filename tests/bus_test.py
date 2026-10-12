@@ -122,7 +122,7 @@ async def test_high_concurrency_throughput(
     """验证高并发下无事件丢失"""
     event_bus = event_bus_factory(max_queue_size=1024, max_handler_semaphore=256)
     handler = CountingHandler()
-    handler_registry.register(handler)
+    await handler_registry.register(handler)
 
     N = 65536
     async with event_bus:
@@ -141,7 +141,7 @@ async def test_backpressure_no_deadlock(
     """并发限流：超过 Semaphore 限制时，新任务应等待"""
     bus = event_bus_factory(max_handler_semaphore=2)
     handler = ConcurrentTrackingHandler(subscriptions=['test.block'])
-    handler_registry.register(handler)
+    await handler_registry.register(handler)
 
     N = 10
     async with bus:
@@ -167,8 +167,8 @@ async def test_error_isolation_and_propagation(event_bus: EventBus, handler_regi
     """单个 Handler 错误不影响其他 Handler，且错误被正确上报"""
     counter = CountingHandler()
     spy = ErrorSpyHandler()
-    handler_registry.register(counter)
-    handler_registry.register(spy)
+    await handler_registry.register(counter)
+    await handler_registry.register(spy)
 
     tasks: List[Awaitable[Any]] = await publish_many(
         event_bus,
@@ -188,8 +188,8 @@ async def test_handler_timeout_handling(event_bus: EventBus, handler_registry: E
     """Handler 超时后触发错误事件，且不影响总线运行"""
     slow = SlowHandler(delay=0.5, subscriptions=['test.slow'])
     spy = ErrorSpyHandler()
-    handler_registry.register(slow)
-    handler_registry.register(spy)
+    await handler_registry.register(slow)
+    await handler_registry.register(spy)
 
     await event_bus.proxy('timeout_pub').publish('test.slow', None)
 
@@ -207,7 +207,7 @@ async def test_handler_timeout_handling(event_bus: EventBus, handler_registry: E
 async def test_pattern_matching_routing(event_bus: EventBus, handler_registry: EventHandlerRegistry) -> None:
     """正则表达式订阅的路由正确性"""
     spy = PatternSpyHandler(pattern=r'user\..*')
-    handler_registry.register(spy)
+    await handler_registry.register(spy)
 
     await event_bus.proxy('route_pub').publish('user.login', None)
     await event_bus.proxy('route_pub').publish('user.logout', None)
@@ -239,8 +239,8 @@ async def test_multi_handler_same_event(
         async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             results.append('B')
 
-    handler_registry.register(HandlerA())
-    handler_registry.register(HandlerB())
+    await handler_registry.register(HandlerA())
+    await handler_registry.register(HandlerB())
 
     await event_bus.proxy('test').publish('test.event', {'value': 1})
     await wait_for_condition(lambda: len(results) == 2)
@@ -256,7 +256,7 @@ async def test_multi_handler_same_event(
 async def test_graceful_shutdown_and_cleanup(event_bus: EventBus, handler_registry: EventHandlerRegistry) -> None:
     """总线优雅停止后资源清理完全"""
     handler = CountingHandler()
-    handler_registry.register(handler)
+    await handler_registry.register(handler)
 
     await event_bus.proxy('shut_pub').publish('test.event', {'value': 1})
     await wait_for_condition(lambda: handler.count == 1)
@@ -282,7 +282,7 @@ async def test_shutdown_cancels_pending_tasks(
         shutdown=ShutdownConfig(tasks_timeout=0.3),
     )
     handler = BlockingHandler(subscriptions=['test.block'])
-    handler_registry.register(handler)
+    await handler_registry.register(handler)
 
     async with bus:
         await bus.proxy('test').publish('test.block', None)
@@ -296,7 +296,7 @@ async def test_shutdown_cancels_pending_tasks(
 async def test_shutting_down_exception(event_bus: EventBus, handler_registry: EventHandlerRegistry) -> None:
     """总线停止过程中新发布事件应抛出 BusShuttingDown"""
     slow = SlowHandler(delay=2.0, subscriptions=['test.slow'])
-    handler_registry.register(slow)
+    await handler_registry.register(slow)
 
     asyncio.create_task(event_bus.proxy('slow_pub').publish('test.slow', None))
     await slow.wait_started()
@@ -395,7 +395,7 @@ async def test_long_running_stability(
     """长时间运行压力测试：验证无资源泄漏和队列溢出"""
     bus: EventBus = event_bus_factory(max_queue_size=10, max_handler_semaphore=25)
     handler = CountingHandler()
-    handler_registry.register(handler)
+    await handler_registry.register(handler)
 
     duration = 10
     rate = 512
@@ -432,7 +432,7 @@ class _StartBoomHandler(EventHandler):
     async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
         pass
 
-    def on_activate(self, bus: EventBus) -> None:
+    async def on_activate(self, bus: EventBus) -> None:
         self.activated += 1
         raise RuntimeError('start boom')
 
@@ -441,7 +441,7 @@ class _StartBoomHandler(EventHandler):
 async def test_start_failure_is_retryable_and_no_dispatch_leak(event_bus_factory: Callable[..., EventBus]):
     """start() 激活失败 → 回滚到未启动态、不泄漏调度任务；修复后可成功重试"""
     hreg = EventHandlerRegistry()
-    hreg.register(_StartBoomHandler())
+    await hreg.register(_StartBoomHandler())
 
     bus = event_bus_factory(h_registry=hreg)
     with pytest.raises(RuntimeError, match='start boom'):
@@ -453,9 +453,9 @@ async def test_start_failure_is_retryable_and_no_dispatch_leak(event_bus_factory
     assert bus._dispatch_task is None
 
     # 移除坏处理器后可成功重试，事件正常路由分发
-    hreg.clear()
+    await hreg.clear()
     good = CountingHandler()
-    hreg.register(good)
+    await hreg.register(good)
 
     await bus.start()
     await bus.proxy('pub').publish('test.event', {'value': 1})
@@ -469,7 +469,7 @@ async def test_start_rolls_back_when_middleware_setup_fails(event_bus_factory: C
     """首阶段（中间件 setup）冲突失败 → 整体回滚：链解绑、无调度泄漏，可重试（覆盖 _abort_start）"""
     hreg = EventHandlerRegistry()
     good = CountingHandler()
-    hreg.register(good)
+    await hreg.register(good)
     chain = MiddlewareChain()
     bus = event_bus_factory(h_registry=hreg, middleware_chain=chain)
     await chain.setup(bus)  # 预绑定 → start 内的 mw_chain.setup 抛 RuntimeError（走回滚）
@@ -529,12 +529,12 @@ async def test_start_orders_middleware_setup_before_handler_activation(
         def __init__(self) -> None:
             super().__init__(['test.event'])
 
-        def on_activate(self, bus: EventBus) -> None:
-            super().on_activate(bus)
+        async def on_activate(self, bus: EventBus) -> None:
+            await super().on_activate(bus)
             order.append('handler.on_activate')
 
-        def on_deactivate(self, bus: EventBus) -> None:
-            super().on_deactivate(bus)
+        async def on_deactivate(self, bus: EventBus) -> None:
+            await super().on_deactivate(bus)
             order.append('handler.on_deactivate')
 
         async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
@@ -543,7 +543,7 @@ async def test_start_orders_middleware_setup_before_handler_activation(
     chain = MiddlewareChain()
     await chain.add(_OrderMiddleware())
     hreg = EventHandlerRegistry()
-    hreg.register(_OrderHandler())
+    await hreg.register(_OrderHandler())
     bus = event_bus_factory(h_registry=hreg, middleware_chain=chain)
 
     await bus.start()
@@ -581,7 +581,7 @@ async def test_start_rolls_back_middleware_when_handler_activation_fails(
     chain = MiddlewareChain()
     await chain.add(_TeardownSpyMiddleware())
     hreg = EventHandlerRegistry()
-    hreg.register(_StartBoomHandler())
+    await hreg.register(_StartBoomHandler())
     bus = event_bus_factory(h_registry=hreg, middleware_chain=chain)
 
     with pytest.raises(RuntimeError, match='start boom'):
@@ -594,9 +594,9 @@ async def test_start_rolls_back_middleware_when_handler_activation_fails(
     assert bus._dispatch_task is None
 
     # 无需人工清理即可成功重试，事件正常路由分发
-    hreg.clear()
+    await hreg.clear()
     good = CountingHandler()
-    hreg.register(good)
+    await hreg.register(good)
     await bus.start()
     await bus.proxy('pub').publish('test.event', {'value': 1})
     await wait_for_condition(lambda: good.count == 1)

@@ -4,7 +4,7 @@
 
 `register` 模块提供了两个注册器类——`ModuleEventRegister` 和 `ModuleHandlerRegister`，用于在模块级别**收集**事件声明与处理器定义，并在应用启动时**统一批量注册**到全局的 `EventRegistry` 和 `EventHandlerRegistry` 中。
 
-与直接调用 `event_registry.register()` 或 `handler_registry.register()` 不同，模块注册器将"定义"与"注册"分离：在模块加载时仅收集（通过装饰器或手动添加），在应用启动阶段一次性完成注册。这种方式使得大型项目可以按模块组织事件和处理器，避免循环导入，同时保持注册时机的可控性。
+与直接调用 `event_registry.register()` 或 `await handler_registry.register()` 不同，模块注册器将"定义"与"注册"分离：在模块加载时仅收集（通过装饰器或手动添加），在应用启动阶段一次性完成注册。这种方式使得大型项目可以按模块组织事件和处理器，避免循环导入，同时保持注册时机的可控性。
 
 ---
 
@@ -49,7 +49,7 @@ class ModuleHandlerRegister:
         self,
         depends: Callable[[], Dict[str, Any]] = lambda: {}
     ) -> Callable[[HandlerT], HandlerT]
-    def register_all_handlers(
+    async def register_all_handlers(
         self, handler_registry: EventHandlerRegistry, *, atomic: bool = False
     ) -> None
 ```
@@ -59,7 +59,7 @@ class ModuleHandlerRegister:
 | `__init__(name)` | 构造注册器。`name` 为模块名称，用于标识和调试。 |
 | `add_handler(handler_type, depends)` | 手动添加一个处理器类及其依赖工厂函数。重复添加自动去重。 |
 | `handler(depends)` | **装饰器工厂**。返回一个类装饰器，自动将处理器类添加到注册器中。`depends` 为返回依赖字典的可调用对象，字典键对应处理器 `__init__` 的参数名，默认 `lambda: {}`。 |
-| `register_all_handlers(handler_registry, *, atomic=False)` | 将所有已收集的处理器**实例化**（通过 `depends` 工厂注入依赖）并一次性注册。`atomic=True` 时启用事务性注册：任一失败则回滚已注册的处理器并抛出异常；默认 `False` 时失败仅记日志并继续。 |
+| `register_all_handlers(handler_registry, *, atomic=False)` | **async**。将所有已收集的处理器**实例化**（通过 `depends` 工厂注入依赖）并一次性注册。`atomic=True` 时启用事务性注册：任一失败则回滚已注册的处理器并抛出异常；默认 `False` 时失败仅记日志并继续。 |
 
 ---
 
@@ -80,7 +80,7 @@ class ModuleHandlerRegister:
      |  # —— 以上仅收集，不注册 ——               |
      |                                         |
      |                                         |  module_events.register_all_events(event_registry)
-     |                                         |  module_handlers.register_all_handlers(handler_registry)
+     |                                         |  await module_handlers.register_all_handlers(handler_registry)
      |                                         |
      |                                         |  # —— 此时才真正注册到全局 ——
 ```
@@ -149,7 +149,7 @@ class AuditLogHandler(EventHandler):
 
 # 应用启动时实例化并注册
 handler_registry = EventHandlerRegistry()
-module_handlers.register_all_handlers(handler_registry)
+await module_handlers.register_all_handlers(handler_registry)
 ```
 
 ### 完整模块组织示例
@@ -201,7 +201,7 @@ handler_registry = EventHandlerRegistry()
 
 # 按模块批量注册
 user_events.register_all_events(event_registry)
-user_handlers.register_all_handlers(handler_registry)
+await user_handlers.register_all_handlers(handler_registry)
 
 bus = EventBus(event_registry, handler_registry)
 ```

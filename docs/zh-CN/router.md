@@ -94,11 +94,11 @@ match() 调用 → 检查版本 (O(1) int 比较) → stale? → _rebuild()
 
 ```python
 class EventHandler(ABC):
-    def on_activate(self, bus: EventBus) -> None:
+    async def on_activate(self, bus: EventBus) -> None:
         if self.handler_id is not None and self.subscriptions:
             bus.router.subscribe(self.handler_id, self.subscriptions)  # 激活即路由
 
-    def on_deactivate(self, bus: EventBus) -> None:
+    async def on_deactivate(self, bus: EventBus) -> None:
         if self.handler_id is not None:
             bus.router.unsubscribe(self.handler_id)                    # 下线即撤销
 ```

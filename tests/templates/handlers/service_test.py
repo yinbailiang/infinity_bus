@@ -395,7 +395,7 @@ class TestIntegration:
         self, running_bus: EventBus, handler_registry: EventHandlerRegistry
     ) -> None:
         """request() 往返：同步 processor 返回成功响应"""
-        handler_registry.register(CalcService())
+        await handler_registry.register(CalcService())
 
         resp = await request(
             running_bus.proxy('cli'),
@@ -413,7 +413,7 @@ class TestIntegration:
         self, running_bus: EventBus, handler_registry: EventHandlerRegistry
     ) -> None:
         """异步 processor 同样支持"""
-        handler_registry.register(AsyncCalcService())
+        await handler_registry.register(AsyncCalcService())
 
         resp = await request(
             running_bus.proxy('cli'),
@@ -428,7 +428,7 @@ class TestIntegration:
 
     async def test_service_error_roundtrip(self, running_bus: EventBus, handler_registry: EventHandlerRegistry) -> None:
         """ServiceError 端到端：调用方收到 success=False 响应"""
-        handler_registry.register(CalcService())
+        await handler_registry.register(CalcService())
 
         resp = await request(
             running_bus.proxy('cli'),
@@ -448,7 +448,7 @@ class TestIntegration:
     ) -> None:
         """单向事件经总线分发被执行"""
         svc = NotifyService()
-        handler_registry.register(svc)
+        await handler_registry.register(svc)
 
         await running_bus.proxy('cli').publish(
             'svc.notify', {'message': 'hello', 'session_id': 's-1', 'request_id': 'r-1'}

@@ -148,7 +148,7 @@ async with expect(bus_proxy, Regex(r"notify\..*")) as future:
 ## 内部机制
 
 - 使用 `OneShotEventHandler` 实现单次触发。
-- 通过 `temporary_handler` 上下文管理器自动注册/注销处理器。
+- 通过**异步** `temporary_handler` 上下文管理器自动注册/注销处理器。
 - 过滤器异常通过 `future.set_exception` 直接传递给等待方，不会污染总线错误通道（不会触发 `__task_error__` 事件）。
 
 ---

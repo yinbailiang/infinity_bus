@@ -138,7 +138,7 @@ event_registry = EventRegistry()
 event_registry.register(GetUserReqEvent)
 event_registry.register(GetUserRespEvent)
 handler_registry = EventHandlerRegistry()
-handler_registry.register(UserService())
+await handler_registry.register(UserService())
 
 async with EventBus(event_registry, handler_registry) as bus:
     resp = await request(bus.proxy('cli'), 'user.get.request', {'user_id': 1}, 'user.get.response')

@@ -71,7 +71,7 @@ class TestRecursionGuardMiddleware:
         await chain.add(guard)
 
         handler = ChainPublishingHandler('mw.ping', {'key': 'nested', 'count': 1})
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -99,7 +99,7 @@ class TestRecursionGuardMiddleware:
         await chain.add(guard)
 
         handler = ChainPublishingHandler('mw.ping', {'key': 'loop', 'count': 1})
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -130,7 +130,7 @@ class TestRecursionGuardMiddleware:
         await chain.add(guard)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -160,7 +160,7 @@ class TestRecursionGuardMiddleware:
         await chain.add(guard)
 
         handler = ChainPublishingHandler('mw.ping', {'key': 'ignored', 'count': 1})
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -201,8 +201,8 @@ class TestRecursionGuardMiddleware:
             async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
                 await bus_proxy.publish('mw.ping', {'key': 'from_b', 'count': 2})
 
-        handler_registry.register(HandlerA())
-        handler_registry.register(HandlerB())
+        await handler_registry.register(HandlerA())
+        await handler_registry.register(HandlerB())
 
         bus = EventBus(
             base_event_registry,
@@ -231,7 +231,7 @@ class TestRecursionGuardMiddleware:
         await chain.add(guard)
 
         handler = ChainPublishingHandler('mw.ping', {'key': 'loop', 'count': 1})
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,

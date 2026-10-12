@@ -274,7 +274,8 @@ class TestModuleHandlerRegister:
         assert entry[1] is factory
 
     # ---- register_all_handlers ----
-    def test_register_all_handlers_instantiates_and_registers(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_instantiates_and_registers(
         self,
         module_handlers: ModuleHandlerRegister,
         empty_event_registry: EventRegistry,
@@ -283,7 +284,7 @@ class TestModuleHandlerRegister:
         for evt in _EXTRA_EVENT_DECLS:
             empty_event_registry.register(evt)
         module_handlers.add_handler(_SimpleHandler, depends=lambda: {'extra': 'test'})
-        module_handlers.register_all_handlers(empty_handler_registry)
+        await module_handlers.register_all_handlers(empty_handler_registry)
 
         assert empty_handler_registry.handlers_count == 1
         handlers = Matcher(empty_event_registry, empty_handler_registry).match('test.event')
@@ -291,7 +292,8 @@ class TestModuleHandlerRegister:
         assert isinstance(handlers[0][1], _SimpleHandler)
         assert handlers[0][1].extra == 'test'
 
-    def test_register_all_handlers_passes_dependencies(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_passes_dependencies(
         self,
         module_handlers: ModuleHandlerRegister,
         empty_event_registry: EventRegistry,
@@ -302,12 +304,13 @@ class TestModuleHandlerRegister:
             empty_event_registry.register(evt)
         fake_db = object()
         module_handlers.add_handler(_AnotherHandler, depends=lambda: {'db': fake_db})
-        module_handlers.register_all_handlers(empty_handler_registry)
+        await module_handlers.register_all_handlers(empty_handler_registry)
 
         handlers = Matcher(empty_event_registry, empty_handler_registry).match('test.another')
         assert cast(_AnotherHandler, handlers[0][1]).db is fake_db
 
-    def test_register_all_handlers_multiple_handlers(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_multiple_handlers(
         self,
         module_handlers: ModuleHandlerRegister,
         empty_event_registry: EventRegistry,
@@ -319,22 +322,24 @@ class TestModuleHandlerRegister:
         module_handlers.add_handler(_SimpleHandler, depends=lambda: {'extra': 'a'})
         module_handlers.add_handler(_AnotherHandler, depends=lambda: {'db': None})
 
-        module_handlers.register_all_handlers(empty_handler_registry)
+        await module_handlers.register_all_handlers(empty_handler_registry)
 
         assert empty_handler_registry.handlers_count == 2
         assert len(Matcher(empty_event_registry, empty_handler_registry).match('test.event')) == 1
         assert len(Matcher(empty_event_registry, empty_handler_registry).match('test.another')) == 1
 
-    def test_register_all_handlers_empty_noop(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_empty_noop(
         self,
         module_handlers: ModuleHandlerRegister,
         empty_handler_registry: EventHandlerRegistry,
     ) -> None:
         """空注册器调用 register_all_handlers 不应报错"""
-        module_handlers.register_all_handlers(empty_handler_registry)
+        await module_handlers.register_all_handlers(empty_handler_registry)
         assert empty_handler_registry.handlers_count == 0
 
-    def test_register_all_handlers_default_depends_empty_dict(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_default_depends_empty_dict(
         self,
         empty_event_registry: EventRegistry,
         empty_handler_registry: EventHandlerRegistry,
@@ -344,12 +349,13 @@ class TestModuleHandlerRegister:
             empty_event_registry.register(evt)
         reg = ModuleHandlerRegister('test')
         reg.add_handler(_SimpleHandler, depends=lambda: {})
-        reg.register_all_handlers(empty_handler_registry)
+        await reg.register_all_handlers(empty_handler_registry)
 
         handlers = Matcher(empty_event_registry, empty_handler_registry).match('test.event')
         assert cast(_SimpleHandler, handlers[0][1]).extra == 'default'
 
-    def test_register_all_handlers_depends_factory_called_per_registration(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_depends_factory_called_per_registration(
         self,
         empty_event_registry: EventRegistry,
         empty_handler_registry: EventHandlerRegistry,
@@ -368,16 +374,17 @@ class TestModuleHandlerRegister:
         reg.add_handler(_SimpleHandler, depends=counting_factory)
 
         # 两次调用 register_all_handlers（第二次注册到新 registry）
-        reg.register_all_handlers(empty_handler_registry)
+        await reg.register_all_handlers(empty_handler_registry)
         reg2 = EventHandlerRegistry()
-        reg.register_all_handlers(reg2)
+        await reg.register_all_handlers(reg2)
 
         assert call_count == 2
         # 第二次调用时 extra 应为 "2"
         handlers = Matcher(empty_event_registry, reg2).match('test.event')
         assert cast(_SimpleHandler, handlers[0][1]).extra == '2'
 
-    def test_register_all_handlers_one_failure_does_not_block_others(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_one_failure_does_not_block_others(
         self,
         empty_event_registry: EventRegistry,
         empty_handler_registry: EventHandlerRegistry,
@@ -396,7 +403,7 @@ class TestModuleHandlerRegister:
         reg.add_handler(_AnotherHandler, depends=lambda: {'db': 'ok-db'})
 
         # 不应抛出异常
-        reg.register_all_handlers(empty_handler_registry)
+        await reg.register_all_handlers(empty_handler_registry)
 
         # 只有 2 个成功注册（失败的被跳过）
         assert empty_handler_registry.handlers_count == 2
@@ -414,7 +421,8 @@ class TestModuleHandlerRegister:
         assert isinstance(another_handlers[0][1], _AnotherHandler)
         assert another_handlers[0][1].db == 'ok-db'
 
-    def test_register_all_handlers_all_fail_still_no_exception(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_all_fail_still_no_exception(
         self,
         empty_handler_registry: EventHandlerRegistry,
     ) -> None:
@@ -428,12 +436,13 @@ class TestModuleHandlerRegister:
         reg.add_handler(_AnotherHandler, depends=_failing_factory)
 
         # 不应抛出异常
-        reg.register_all_handlers(empty_handler_registry)
+        await reg.register_all_handlers(empty_handler_registry)
 
         assert empty_handler_registry.handlers_count == 0
 
     # ---- register_all_handlers (atomic=True) ----
-    def test_register_all_handlers_atomic_all_succeed(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_atomic_all_succeed(
         self,
         empty_event_registry: EventRegistry,
         empty_handler_registry: EventHandlerRegistry,
@@ -446,11 +455,12 @@ class TestModuleHandlerRegister:
         reg.add_handler(_SimpleHandler, depends=lambda: {'extra': 'a'})
         reg.add_handler(_AnotherHandler, depends=lambda: {'db': 'x'})
 
-        reg.register_all_handlers(empty_handler_registry, atomic=True)
+        await reg.register_all_handlers(empty_handler_registry, atomic=True)
 
         assert empty_handler_registry.handlers_count == 2
 
-    def test_register_all_handlers_atomic_rollback_on_failure(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_atomic_rollback_on_failure(
         self,
         empty_event_registry: EventRegistry,
         empty_handler_registry: EventHandlerRegistry,
@@ -468,12 +478,13 @@ class TestModuleHandlerRegister:
         reg.add_handler(_SimpleHandler, depends=_failing_factory)
 
         with pytest.raises(RuntimeError, match='依赖工厂故意失败'):
-            reg.register_all_handlers(empty_handler_registry, atomic=True)
+            await reg.register_all_handlers(empty_handler_registry, atomic=True)
 
         # 回滚后注册表应为空
         assert empty_handler_registry.handlers_count == 0
 
-    def test_register_all_handlers_atomic_first_fails_no_rollback_needed(
+    @pytest.mark.asyncio
+    async def test_register_all_handlers_atomic_first_fails_no_rollback_needed(
         self,
         empty_event_registry: EventRegistry,
         empty_handler_registry: EventHandlerRegistry,
@@ -490,7 +501,7 @@ class TestModuleHandlerRegister:
         reg.add_handler(_AnotherHandler, depends=lambda: {'db': 'never-reached'})
 
         with pytest.raises(RuntimeError, match='第一个就失败'):
-            reg.register_all_handlers(empty_handler_registry, atomic=True)
+            await reg.register_all_handlers(empty_handler_registry, atomic=True)
 
         assert empty_handler_registry.handlers_count == 0
 

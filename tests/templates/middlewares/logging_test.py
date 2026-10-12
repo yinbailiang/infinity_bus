@@ -51,8 +51,8 @@ class _StartupAnnouncerHandler(EventHandler):
         super().__init__(subscriptions=[])
         self._announce_task: Optional[asyncio.Task[None]] = None
 
-    def on_activate(self, bus: EventBus) -> None:
-        super().on_activate(bus)
+    async def on_activate(self, bus: EventBus) -> None:
+        await super().on_activate(bus)
         self._announce_task = asyncio.create_task(self._announce(bus))
 
     async def _announce(self, bus: EventBus) -> None:
@@ -100,7 +100,7 @@ class TestSQLiteLoggingMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -140,7 +140,7 @@ class TestSQLiteLoggingMiddleware:
             await chain.add(mw)
 
             handler = SimplePingHandler()
-            handler_registry.register(handler)
+            await handler_registry.register(handler)
 
             bus = EventBus(
                 base_event_registry,
@@ -209,8 +209,8 @@ class TestSQLiteLoggingMiddleware:
         await chain.add(mw)
 
         ping = SimplePingHandler()
-        handler_registry.register(ping)
-        handler_registry.register(_StartupAnnouncerHandler())
+        await handler_registry.register(ping)
+        await handler_registry.register(_StartupAnnouncerHandler())
 
         bus = EventBus(
             base_event_registry,
@@ -252,7 +252,7 @@ class TestJSONLLoggingMiddleware:
             await chain.add(mw)
 
             handler = SimplePingHandler()
-            handler_registry.register(handler)
+            await handler_registry.register(handler)
 
             bus = EventBus(
                 base_event_registry,
@@ -310,7 +310,7 @@ class TestJSONLLoggingMiddleware:
             await chain.add(mw)
 
             handler = SimplePingHandler()
-            handler_registry.register(handler)
+            await handler_registry.register(handler)
 
             bus = EventBus(
                 base_event_registry,
@@ -393,8 +393,8 @@ class TestJSONLLoggingMiddleware:
             await chain.add(mw)
 
             ping = SimplePingHandler()
-            handler_registry.register(ping)
-            handler_registry.register(_StartupAnnouncerHandler())
+            await handler_registry.register(ping)
+            await handler_registry.register(_StartupAnnouncerHandler())
 
             bus = EventBus(
                 base_event_registry,

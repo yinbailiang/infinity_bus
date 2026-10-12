@@ -95,7 +95,7 @@ class OrderHandler(EventHandler):
 events = EventRegistry()
 events.register(OrderCreated)
 handlers = EventHandlerRegistry()
-handlers.register(OrderHandler())
+await handlers.register(OrderHandler())
 
 # 5. Run
 bus = EventBus(events, handlers)

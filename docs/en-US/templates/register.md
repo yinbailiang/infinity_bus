@@ -7,7 +7,7 @@ The `register` module provides two registrar classes — `ModuleEventRegister` a
 at the module level, then **bulk-registering** them into the global `EventRegistry` and
 `EventHandlerRegistry` at application startup.
 
-Unlike directly calling `event_registry.register()` or `handler_registry.register()`,
+Unlike directly calling `event_registry.register()` or awaiting `handler_registry.register()`,
 module registrars separate "definition" from "registration": they only collect during
 module import (via decorators or manual addition), and perform the actual registration
 in one batch at startup. This allows large projects to organize events and handlers by
@@ -57,7 +57,7 @@ class ModuleHandlerRegister:
         self,
         depends: Callable[[], Dict[str, Any]] = lambda: {}
     ) -> Callable[[HandlerT], HandlerT]
-    def register_all_handlers(
+    async def register_all_handlers(
         self, handler_registry: EventHandlerRegistry, *, atomic: bool = False
     ) -> None
 ```
@@ -67,7 +67,7 @@ class ModuleHandlerRegister:
 | `__init__(name)` | Constructor. `name` is the module name for identification and debugging. |
 | `add_handler(handler_type, depends)` | Manually add a handler class and its dependency factory. Duplicates are auto-deduplicated. |
 | `handler(depends)` | **Decorator factory**. Returns a class decorator that adds the handler class to the registrar. `depends` is a callable returning a dependency dict; keys correspond to `__init__` parameter names. Defaults to `lambda: {}`. |
-| `register_all_handlers(handler_registry, *, atomic=False)` | **Instantiates** all collected handlers (injecting dependencies via `depends` factories) and registers them in batch. `atomic=True` enables transactional registration: any failure rolls back already-registered handlers and raises; default `False` logs and continues on failure. |
+| `register_all_handlers(handler_registry, *, atomic=False)` | **async**. **Instantiates** all collected handlers (injecting dependencies via `depends` factories) and registers them in batch. `atomic=True` enables transactional registration: any failure rolls back already-registered handlers and raises; default `False` logs and continues on failure. |
 
 ---
 
@@ -88,7 +88,7 @@ Module Import Phase                        App Startup Phase
      |  # —— Collection only, no registration —— |
      |                                         |
      |                                         |  module_events.register_all_events(event_registry)
-     |                                         |  module_handlers.register_all_handlers(handler_registry)
+     |                                         |  await module_handlers.register_all_handlers(handler_registry)
      |                                         |
      |                                         |  # —— Now registered globally ——
 ```
@@ -157,7 +157,7 @@ class AuditLogHandler(EventHandler):
 
 # Instantiate and register at startup
 handler_registry = EventHandlerRegistry()
-module_handlers.register_all_handlers(handler_registry)
+await module_handlers.register_all_handlers(handler_registry)
 ```
 
 ### Full Module Organization Example
@@ -209,7 +209,7 @@ handler_registry = EventHandlerRegistry()
 
 # Batch register by module
 user_events.register_all_events(event_registry)
-user_handlers.register_all_handlers(handler_registry)
+await user_handlers.register_all_handlers(handler_registry)
 
 bus = EventBus(event_registry, handler_registry)
 ```

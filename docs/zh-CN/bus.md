@@ -331,7 +331,7 @@ class MyHandler(EventHandler):
 
 # 4. 注册处理器
 h_reg = EventHandlerRegistry()
-h_reg.register(MyHandler())
+await h_reg.register(MyHandler())
 
 # 5. 启动总线并发布
 async with EventBus(reg, h_reg) as bus:

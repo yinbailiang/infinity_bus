@@ -74,7 +74,7 @@ class TestEventForwardMiddleware:
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['mw.ping'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -112,7 +112,7 @@ class TestEventForwardMiddleware:
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['mw.ping'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -150,7 +150,7 @@ class TestEventForwardMiddleware:
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['mw.ping'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -195,7 +195,7 @@ class TestEventForwardMiddleware:
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['mw.ping', 'user.login'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -242,7 +242,7 @@ class TestEventForwardMiddleware:
 
         # 同时订阅用户事件和系统事件
         spy = ForwardSpyHandler(['mw.ping', 'infinity_bus.__shutdown__', 'infinity_bus.__task_error__'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -296,7 +296,7 @@ class TestEventForwardMiddleware:
 
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['infinity_bus.custom_test'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -336,7 +336,7 @@ class TestEventForwardMiddleware:
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['mw.ping'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -376,7 +376,7 @@ class TestEventForwardMiddleware:
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['mw.ping'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -427,7 +427,7 @@ class TestEventForwardMiddleware:
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['mw.ping'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -486,7 +486,7 @@ class TestEventForwardMiddleware:
         await chain.add(fw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         source_bus = EventBus(
             base_event_registry,
@@ -514,7 +514,7 @@ class TestEventForwardMiddleware:
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['mw.ping'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -568,7 +568,7 @@ class TestEventForwardMiddleware:
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['mw.ping', 'user.login'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -606,7 +606,7 @@ class TestEventForwardMiddleware:
         target_registry = create_event_registry(BASE_EVENT_DECLS)
         target_handlers = EventHandlerRegistry()
         spy = ForwardSpyHandler(['mw.ping'])
-        target_handlers.register(spy)
+        await target_handlers.register(spy)
 
         target_bus = EventBus(
             target_registry, target_handlers, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10))
@@ -656,8 +656,8 @@ class TestMakeBidirectionalForward:
 
         spy_a = ForwardSpyHandler(['mw.ping', 'user.login'])
         spy_b = ForwardSpyHandler(['mw.ping', 'user.login'])
-        handlers_a.register(spy_a)
-        handlers_b.register(spy_b)
+        await handlers_a.register(spy_a)
+        await handlers_b.register(spy_b)
 
         # 先创建链和总线，再生成中间件对并追加到链中
         chain_a = MiddlewareChain()
@@ -721,8 +721,8 @@ class TestMakeBidirectionalForward:
 
         spy_a = ForwardSpyHandler(['mw.ping'])
         spy_b = ForwardSpyHandler(['mw.ping'])
-        handlers_a.register(spy_a)
-        handlers_b.register(spy_b)
+        await handlers_a.register(spy_a)
+        await handlers_b.register(spy_b)
 
         chain_a = MiddlewareChain()
         chain_b = MiddlewareChain()
@@ -778,8 +778,8 @@ class TestMakeBidirectionalForward:
 
         spy_a = ForwardSpyHandler(['mw.ping'])
         spy_b = ForwardSpyHandler(['mw.ping'])
-        handlers_a.register(spy_a)
-        handlers_b.register(spy_b)
+        await handlers_a.register(spy_a)
+        await handlers_b.register(spy_b)
 
         chain_a = MiddlewareChain()
         chain_b = MiddlewareChain()
@@ -833,8 +833,8 @@ class TestMakeBidirectionalForward:
 
         spy_a = ForwardSpyHandler(['mw.ping', 'user.login'])
         spy_b = ForwardSpyHandler(['mw.ping', 'user.login'])
-        handlers_a.register(spy_a)
-        handlers_b.register(spy_b)
+        await handlers_a.register(spy_a)
+        await handlers_b.register(spy_b)
 
         chain_a = MiddlewareChain()
         chain_b = MiddlewareChain()
@@ -890,7 +890,7 @@ class TestMakeBidirectionalForward:
         handlers_b = EventHandlerRegistry()
 
         spy_b = ForwardSpyHandler(['mw.ping'])
-        handlers_b.register(spy_b)
+        await handlers_b.register(spy_b)
 
         # bus_b 先创建并持有链，再生成中间件对
         chain_b = MiddlewareChain()
@@ -948,7 +948,7 @@ class TestMakeBidirectionalForward:
         handlers_b = EventHandlerRegistry()
 
         spy_b = ForwardSpyHandler(['mw.ping'])
-        handlers_b.register(spy_b)
+        await handlers_b.register(spy_b)
 
         chain_a = MiddlewareChain()
         chain_b = MiddlewareChain()

@@ -92,7 +92,7 @@ class MyHandler(EventHandler):
 reg = EventRegistry()
 reg.register(MyEvent)
 h_reg = EventHandlerRegistry()
-h_reg.register(MyHandler())
+await h_reg.register(MyHandler())
 
 # 5. 运行
 async def main():

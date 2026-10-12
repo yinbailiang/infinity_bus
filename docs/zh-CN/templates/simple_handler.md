@@ -70,7 +70,7 @@ async def on_system_ready() -> None:
     print("System is ready!")
 
 # 注册到总线
-handler_registry.register(on_system_ready())
+await handler_registry.register(on_system_ready())
 ```
 
 ### 基础用法：有负载事件
@@ -92,7 +92,7 @@ class UserCreated(EventDeclaration):
 async def send_welcome_email(payload: UserCreatedPayload) -> None:
     print(f"Sending welcome email to {payload.email}")
 
-handler_registry.register(send_welcome_email())
+await handler_registry.register(send_welcome_email())
 ```
 
 ### 同步处理器
@@ -103,7 +103,7 @@ def log_user_creation(payload: UserCreatedPayload) -> None:
     # 同步函数同样支持 —— 装饰器自动适配
     print(f"[LOG] User created: {payload.user_id}")
 
-handler_registry.register(log_user_creation())
+await handler_registry.register(log_user_creation())
 ```
 
 ### 自定义超时

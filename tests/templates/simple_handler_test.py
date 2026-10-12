@@ -263,7 +263,7 @@ class TestHandlerIntegration:
         async def handle_no_payload() -> None:
             received.append(None)
 
-        hid = handler_registry.register(handle_no_payload())
+        hid = await handler_registry.register(handle_no_payload())
         proxy = running_bus.proxy('test')
 
         await proxy.publish('test.no_payload', None)
@@ -271,7 +271,7 @@ class TestHandlerIntegration:
         await asyncio.sleep(0.1)
 
         assert len(received) == 1
-        handler_registry.unregister(hid)
+        await handler_registry.unregister(hid)
 
     @pytest.mark.asyncio
     async def test_payload_handler_receives_correct_payload(
@@ -284,7 +284,7 @@ class TestHandlerIntegration:
         async def handle_with_payload(payload: PayloadModel) -> None:
             received_payloads.append(payload)
 
-        hid = handler_registry.register(handle_with_payload())
+        hid = await handler_registry.register(handle_with_payload())
         proxy = running_bus.proxy('test')
 
         await proxy.publish('test.with_payload', {'value': 42, 'msg': 'integration'})
@@ -293,7 +293,7 @@ class TestHandlerIntegration:
         assert len(received_payloads) == 1
         assert received_payloads[0].value == 42
         assert received_payloads[0].msg == 'integration'
-        handler_registry.unregister(hid)
+        await handler_registry.unregister(hid)
 
     @pytest.mark.asyncio
     async def test_sync_handler_in_bus(self, running_bus: EventBus, handler_registry: EventHandlerRegistry) -> None:
@@ -304,14 +304,14 @@ class TestHandlerIntegration:
         def sync_handler(payload: PayloadModel) -> None:
             received.append(payload.value)
 
-        hid = handler_registry.register(sync_handler())
+        hid = await handler_registry.register(sync_handler())
         proxy = running_bus.proxy('test')
 
         await proxy.publish('test.with_payload', {'value': 99, 'msg': 'sync'})
         await asyncio.sleep(0.1)
 
         assert received == [99]
-        handler_registry.unregister(hid)
+        await handler_registry.unregister(hid)
 
     @pytest.mark.asyncio
     async def test_multiple_handlers_same_event(
@@ -328,16 +328,16 @@ class TestHandlerIntegration:
         async def handler_b(payload: PayloadModel) -> None:
             results.append('B')
 
-        hid_a = handler_registry.register(handler_a())
-        hid_b = handler_registry.register(handler_b())
+        hid_a = await handler_registry.register(handler_a())
+        hid_b = await handler_registry.register(handler_b())
         proxy = running_bus.proxy('test')
 
         await proxy.publish('test.with_payload', {'value': 1, 'msg': 'multi'})
         await asyncio.sleep(0.1)
 
         assert set(results) == {'A', 'B'}
-        handler_registry.unregister(hid_a)
-        handler_registry.unregister(hid_b)
+        await handler_registry.unregister(hid_a)
+        await handler_registry.unregister(hid_b)
 
 
 # ---------------------------------------------------------------------------

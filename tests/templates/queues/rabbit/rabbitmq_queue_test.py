@@ -91,7 +91,7 @@ async def _member(
     q = await RabbitFanoutQueue.create(member_id, url=url, registry=_registry(), strategy=strategy)
     spy = PayloadSpy(member_id)
     bus = EventBus(_registry(), EventHandlerRegistry(), queue=q)
-    bus.proxy(member_id).handlers_registry.register(spy)
+    await bus.proxy(member_id).handlers_registry.register(spy)
     await bus.start()
     await asyncio.sleep(0.3)  # 等 broker 侧订阅生效（无协议级就绪信号）
     return q, bus, spy

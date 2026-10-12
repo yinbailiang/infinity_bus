@@ -43,7 +43,7 @@ async def main() -> None:
     reg = EventRegistry()
     reg.register(MyEvent)
     h_reg = EventHandlerRegistry()
-    h_reg.register(my_handler())
+    await h_reg.register(my_handler())
 
     async with EventBus(reg, h_reg) as bus:
         await bus.proxy('cli').publish('my.event', {'message': 'Hello, EventBus!'})

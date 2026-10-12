@@ -204,7 +204,7 @@ async def test_bus_uses_injected_queue_for_dispatch(
     recording = RecordingEventQueue()
     bus = EventBus(base_event_registry, handler_registry, queue=recording)
     handler = CountingHandler()
-    handler_registry.register(handler)
+    await handler_registry.register(handler)
 
     async with bus:
         await bus.proxy('queue_test').publish('test.event', {'value': 1})
@@ -224,7 +224,7 @@ async def test_bus_queue_size_reflects_injected_queue(
     recording = RecordingEventQueue()
     bus = EventBus(base_event_registry, handler_registry, queue=recording)
     handler = CountingHandler()
-    handler_registry.register(handler)
+    await handler_registry.register(handler)
 
     async with bus:
         await bus.proxy('queue_test').publish('test.event', {'value': 1})
@@ -242,7 +242,7 @@ async def test_bus_graceful_stop_with_custom_queue(
     recording = RecordingEventQueue()
     bus = EventBus(base_event_registry, handler_registry, queue=recording)
     handler = CountingHandler()
-    handler_registry.register(handler)
+    await handler_registry.register(handler)
 
     async with bus:
         for i in range(5):
@@ -265,7 +265,7 @@ async def test_bus_accepts_bounded_injected_queue(
         queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=2)),
     )
     handler = CountingHandler()
-    handler_registry.register(handler)
+    await handler_registry.register(handler)
 
     async with bus:
         for i in range(10):

@@ -886,7 +886,7 @@ class TestMiddlewareIntegration:
 
         # 需要注册 mw.ping 事件和对应的 handler
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -912,7 +912,7 @@ class TestMiddlewareIntegration:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -938,7 +938,7 @@ class TestMiddlewareIntegration:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -970,7 +970,7 @@ class TestMiddlewareIntegration:
         await chain.add(mw2)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -1031,7 +1031,7 @@ class TestMiddlewareIntegration:
         await chain.add(mut_mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -1063,7 +1063,7 @@ class TestMiddlewareIntegration:
         await chain.add(good_mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -1095,7 +1095,7 @@ class TestMiddlewareIntegration:
     ) -> None:
         """无中间件时总线表现正常"""
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -1147,7 +1147,7 @@ class TestMiddlewareHotReload:
     ) -> None:
         """运行时添加的中间件对后续发布生效"""
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         chain = MiddlewareChain()
         bus = EventBus(
@@ -1204,7 +1204,7 @@ class TestMiddlewareHotReload:
     ) -> None:
         """运行时移除短路中间件后，事件恢复正常流通"""
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         short = ShortCircuitBeforeMiddleware()
         chain = MiddlewareChain()
@@ -1264,7 +1264,7 @@ class TestMiddlewareHotReload:
         await chain.add(mw_outer)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,

@@ -46,7 +46,7 @@ class TestEventBlockMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -75,7 +75,7 @@ class TestEventBlockMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -103,7 +103,7 @@ class TestEventBlockMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -144,7 +144,7 @@ class TestEventBlockMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -192,7 +192,7 @@ class TestTransformThenBlock:
         await chain.add(block_mw)  # transform 在外层，先执行
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,

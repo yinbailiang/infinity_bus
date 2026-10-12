@@ -99,11 +99,11 @@ The `EventHandler` base class hooks routing registration into bus-lifecycle hook
 
 ```python
 class EventHandler(ABC):
-    def on_activate(self, bus: EventBus) -> None:
+    async def on_activate(self, bus: EventBus) -> None:
         if self.handler_id is not None and self.subscriptions:
             bus.router.subscribe(self.handler_id, self.subscriptions)  # activation is routing
 
-    def on_deactivate(self, bus: EventBus) -> None:
+    async def on_deactivate(self, bus: EventBus) -> None:
         if self.handler_id is not None:
             bus.router.unsubscribe(self.handler_id)                    # offline revokes
 ```

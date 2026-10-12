@@ -1,13 +1,12 @@
 import asyncio
 import logging
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager
 from inspect import isawaitable
 from typing import (
     Any,
     AsyncGenerator,
     Awaitable,
     Callable,
-    Generator,
     List,
     Optional,
     Union,
@@ -80,17 +79,17 @@ class OneShotEventHandler(EventHandler):
             self._on_match(raw_event)
 
 
-@contextmanager
-def temporary_handler(
+@asynccontextmanager
+async def temporary_handler(
     handler_registry: EventHandlerRegistry,
     handler: EventHandler,
-) -> Generator[None, None, None]:
-    """临时注册一个事件处理器，离开上下文时自动注销。"""
-    handler_id: str = handler_registry.register(handler)
+) -> AsyncGenerator[None, None]:
+    """临时注册一个事件处理器，离开上下文时自动注销（**异步上下文管理器**）。"""
+    handler_id: str = await handler_registry.register(handler)
     try:
         yield
     finally:
-        handler_registry.unregister(handler_id)
+        await handler_registry.unregister(handler_id)
 
 
 @asynccontextmanager
@@ -133,7 +132,7 @@ async def expect(
     )
 
     # 使用 temporary_handler 保证清理
-    with temporary_handler(bus_proxy.handlers_registry, handler):
+    async with temporary_handler(bus_proxy.handlers_registry, handler):
         try:
             yield future
         finally:

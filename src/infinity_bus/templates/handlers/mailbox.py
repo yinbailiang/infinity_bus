@@ -78,17 +78,17 @@ class MailboxHandler(EventHandler, ABC):
     # 生命周期钩子 — 任务随总线激活/解绑启停
     # ------------------------------------------------------------------
 
-    def on_activate(self, bus: EventBus) -> None:
+    async def on_activate(self, bus: EventBus) -> None:
         """总线激活：订阅登记由基类完成；本类捕获 bus 并启动 process() 后台任务。"""
-        super().on_activate(bus)
+        await super().on_activate(bus)
         self._bus = bus
         self._deactivated = False
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._process_loop(), name=f'{self.__class__.__name__}._process_loop')
 
-    def on_deactivate(self, bus: EventBus) -> None:
+    async def on_deactivate(self, bus: EventBus) -> None:
         """总线下线：订阅撤销由基类完成；本类取消任务并清空积压。"""
-        super().on_deactivate(bus)
+        await super().on_deactivate(bus)
         self._deactivated = True
         task = self._task
         self._task = None

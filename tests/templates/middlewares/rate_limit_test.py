@@ -39,7 +39,7 @@ class TestRateLimitMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -67,7 +67,7 @@ class TestRateLimitMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -97,7 +97,7 @@ class TestRateLimitMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -132,7 +132,7 @@ class TestRateLimitMiddleware:
         await chain.add(mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,
@@ -181,7 +181,7 @@ class TestRateLimitBeforeTransform:
         await chain.add(trans_mw)
 
         handler = SimplePingHandler()
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         bus = EventBus(
             base_event_registry,

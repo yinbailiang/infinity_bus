@@ -340,7 +340,7 @@ class MyHandler(EventHandler):
 
 # 4. Register handler
 h_reg = EventHandlerRegistry()
-h_reg.register(MyHandler())
+await h_reg.register(MyHandler())
 
 # 5. Start bus and publish
 async with EventBus(reg, h_reg) as bus:

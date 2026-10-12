@@ -179,7 +179,7 @@ class TestLifecycle:
     ) -> None:
         """注册到已激活总线时经 on_activate 立即启动 process() 任务"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
         assert handler.is_running
 
     async def test_task_starts_on_bus_start(
@@ -187,7 +187,7 @@ class TestLifecycle:
     ) -> None:
         """总线启动（registry.activate）时对在册处理器启动 process() 任务"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
         assert not handler.is_running  # 已注册但总线未启动 → 未激活
 
         bus = EventBus(event_registry, handler_registry, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=32)))
@@ -205,7 +205,7 @@ class TestLifecycle:
     ) -> None:
         """激活（注册到已运行总线）后 bus 属性指向正确的 EventBus"""
         handler = _BusCaptureHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
         assert handler.bus is running_bus
 
     async def test_deactivate_stops_task_and_clears_bus(
@@ -213,7 +213,7 @@ class TestLifecycle:
     ) -> None:
         """总线停止（registry.deactivate）时取消任务并清空 bus"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
         await running_bus._publish('mailbox.ping', source='test')
         await asyncio.sleep(0.05)
         assert handler.is_running
@@ -234,7 +234,7 @@ class TestQueueing:
     async def test_events_fifo_order(self, running_bus: EventBus, handler_registry: EventHandlerRegistry) -> None:
         """事件按入队顺序被 process() 取出"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         await running_bus._publish('mailbox.ping', source='test')
         await running_bus._publish('mailbox.ping', source='test')
@@ -252,7 +252,7 @@ class TestQueueing:
     ) -> None:
         """大量事件入队后全部被处理"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         n = 50
         for _ in range(n):
@@ -273,7 +273,7 @@ class TestShutdown:
     ) -> None:
         """bus.stop()（registry.deactivate 钩子）取消正在运行的 process() 任务"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         await running_bus._publish('mailbox.ping', source='test')
         await asyncio.sleep(0.05)
@@ -286,7 +286,7 @@ class TestShutdown:
     async def test_shutdown_before_any_event_does_not_crash(self, handler_registry: EventHandlerRegistry) -> None:
         """未激活时直接调用 handle 不会崩溃也不会创建任务（事件仅入队）"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
         assert not handler.is_running
 
         # 直接调用 handle 传入任意事件 — 不应崩溃
@@ -300,7 +300,7 @@ class TestShutdown:
     ) -> None:
         """mailbox 不再隐式订阅 ShutdownEvent：停机由 deactivate 钩子驱动，不会收到它"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         await running_bus._publish('mailbox.ping', source='test')
         await asyncio.sleep(0.05)
@@ -317,7 +317,7 @@ class TestShutdown:
     ) -> None:
         """关闭后 _task 被置为 None"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         await running_bus._publish('mailbox.ping', source='test')
         await asyncio.sleep(0.05)
@@ -332,7 +332,7 @@ class TestShutdown:
     ) -> None:
         """关闭后 is_running 返回 False"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         await running_bus._publish('mailbox.ping', source='test')
         await asyncio.sleep(0.05)
@@ -431,7 +431,7 @@ class TestExceptionHandling:
     ) -> None:
         """活动总线上抛 StopMailbox：process 任务结束、总线继续运行"""
         handler = _StopViaExceptionHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
         assert handler.is_running
 
         await running_bus._publish('mailbox.ping', source='test')
@@ -452,8 +452,8 @@ class TestIntegration:
         """MailboxHandler 收到 ping 后通过 proxy 发布 pong"""
         echo = _EchoHandler()
         collect = _CollectHandler(subscriptions=[MailboxPongEvent.name])
-        handler_registry.register(echo)
-        handler_registry.register(collect)
+        await handler_registry.register(echo)
+        await handler_registry.register(collect)
 
         await running_bus._publish('mailbox.ping', source='test')
         await asyncio.sleep(0.1)
@@ -464,7 +464,7 @@ class TestIntegration:
     async def test_event_chain_tracking(self, running_bus: EventBus, handler_registry: EventHandlerRegistry) -> None:
         """proxy 携带正确的事件链信息"""
         handler = _CollectHandler(subscriptions=[MailboxPingEvent.name])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         await running_bus._publish('mailbox.ping', source='origin')
         await asyncio.sleep(0.1)
@@ -478,7 +478,7 @@ class TestIntegration:
     ) -> None:
         """总线关闭前发布的事件在关闭前被处理"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         await running_bus._publish('mailbox.ping', source='test')
         await asyncio.sleep(0.05)
@@ -542,7 +542,7 @@ class TestEdgeCases:
     ) -> None:
         """并发事件到达时仅创建一个 process() 任务"""
         handler = _CollectHandler(subscriptions=['mailbox.ping'])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         async def publish_many():
             for _ in range(10):
@@ -560,7 +560,7 @@ class TestEdgeCases:
     ) -> None:
         """支持 Regex 订阅"""
         handler = _CollectHandler(subscriptions=[Regex(r'mailbox\..*')])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
 
         await running_bus._publish('mailbox.ping', source='test')
         await running_bus._publish('mailbox.pong', source='test')
@@ -585,7 +585,7 @@ class TestEdgeCases:
     ) -> None:
         """下线后迟到入队（put）应被丢弃，而非留下无人消费的孤儿积压"""
         handler = _CollectHandler(subscriptions=[MailboxPingEvent.name])
-        handler_registry.register(handler)
+        await handler_registry.register(handler)
         bus = EventBus(event_registry, handler_registry, queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=32)))
         await bus.start()
         assert handler.is_running

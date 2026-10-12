@@ -231,7 +231,7 @@ class EventBus:
                 # 在激活/启动阶段发布的消息依赖已就绪的中间件管道。
                 await self._mw_chain.setup(self)
                 # 阶段二：激活处理器（订阅登记）。
-                self._handlers.activate(self)
+                await self._handlers.activate(self)
                 # 阶段三：启动调度循环、对外就绪。
                 self._dispatch_task = asyncio.create_task(self._dispatch_loop())
                 self._running.set()
@@ -263,7 +263,7 @@ class EventBus:
         except Exception:
             logger.exception('Failed to roll back dispatch during start')
         try:
-            self._handlers.deactivate()
+            await self._handlers.deactivate()
         except Exception:
             logger.exception('Handler deactivation failed during start rollback')
         try:
@@ -300,7 +300,7 @@ class EventBus:
             await self._wait_all_tasks_done()  # 等待所有处理器任务完成
 
             self._running.clear()
-            failures = self._handlers.deactivate()
+            failures = await self._handlers.deactivate()
             if failures:
                 logger.warning(
                     '%d handler(s) failed to deactivate during stop; they remain registered',
