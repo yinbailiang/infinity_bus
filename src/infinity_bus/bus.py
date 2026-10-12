@@ -102,6 +102,10 @@ class ShutdownConfig(BaseModel):
     queue_timeout_min: float = Field(default=1.0, description='队列排空最小等待时间（秒）')
     queue_timeout_max: float = Field(default=15.0, description='队列排空最大等待时间（秒）')
     tasks_timeout: float = Field(default=15.0, description='活跃任务完成等待时间（秒）')
+    task_reclaim_delay: float = Field(
+        default=0.0,
+        description='任务回收前等待完成回调（含任务异常日志）落定的时长（秒）；0 表示仅让出一次事件循环',
+    )
     avg_wait_time: float = Field(default=0.05, description='每个事件平均处理时间估算（秒）')
 
 
@@ -530,9 +534,9 @@ class EventBus:
         """等待所有未完成的任务完成，适用于事件总线停止时调用。
 
         对被取消任务**先整体取消、再统一等待**（避免逐个取消时，先取消的任务
-        释放并发信号量、让仍在排队的任务抢先开始执行）；结束后同步摘除已完成
-        任务——完成回调经 ``call_soon`` 调度可能滞后于本函数返回，此处确定性回收
-        （回调仍会幂等执行、异常照常记录）。
+        释放并发信号量、让仍在排队的任务抢先开始执行）；随后让出事件循环
+        （可配置延时 ``ShutdownConfig.task_reclaim_delay``）使完成回调与任务异常
+        日志先行落定，最后同步摘除已完成任务作为确定性兜底（回调仍会幂等执行）。
         """
         if self._active_tasks:
             try:
@@ -553,6 +557,9 @@ class EventBus:
                             await task
                         except asyncio.CancelledError:
                             pass
+                # 让完成回调（含任务异常日志）先行落定：默认仅让出一次事件循环，
+                # task_reclaim_delay > 0 时额外等待（可配置）
+                await asyncio.sleep(self._shutdown.task_reclaim_delay)
                 for task in list(self._active_tasks):
                     if task.done():
                         self._active_tasks.discard(task)

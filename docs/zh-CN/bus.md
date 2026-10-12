@@ -231,6 +231,7 @@ class ShutdownConfig(BaseModel):
     queue_timeout_min: float = 1.0
     queue_timeout_max: float = 15.0
     tasks_timeout: float = 15.0
+    task_reclaim_delay: float = 0.0
     avg_wait_time: float = 0.05
 ```
 
@@ -239,6 +240,7 @@ class ShutdownConfig(BaseModel):
 | `queue_timeout_min` | `float` | `1.0` | 队列排空最小等待时间（秒）。 |
 | `queue_timeout_max` | `float` | `15.0` | 队列排空最大等待时间（秒）。 |
 | `tasks_timeout` | `float` | `15.0` | 活跃处理器任务完成等待时间（秒）。 |
+| `task_reclaim_delay` | `float` | `0.0` | 任务回收前等待完成回调（含任务异常日志）落定的时长（秒）；`0` 表示仅让出一次事件循环。 |
 | `avg_wait_time` | `float` | `0.05` | 每个事件平均处理时间估算（秒），用于动态计算队列排空超时。 |
 
 实际队列排空超时 = `max(queue_timeout_min, min(queue_timeout_max, queue_size × avg_wait_time))`。
@@ -249,7 +251,10 @@ class ShutdownConfig(BaseModel):
 
 | 异常类 | 说明 |
 | - | - |
-| `BusShuttingDown` | 总线正在停止时尝试发布新事件抛出。继承自 `Exception`。调用方应捕获并执行清理逻辑。 |
+| `BusError` | 总线异常基类，下列 `Bus*` 异常均为其子类。 |
+| `BusShuttingDown` | 总线正在停止时尝试发布新事件抛出。调用方应捕获并执行清理逻辑。 |
+| `BusStartFailed` | 总线启动失败且回滚完整抛出；携带 `original_error`（原始异常挂在 `__cause__` 链上）。 |
+| `BusStartRollbackError` | 总线启动失败且回滚不完整抛出；聚合 `original_error`、`handler_failures`、`middleware_failures`。 |
 | `RuntimeError` | 总线尚未启动时尝试发布事件抛出。 |
 | `ValueError` | 未知事件名，或负载不匹配（声明要求负载但未传入、或声明无负载但传入了数据）。 |
 | `TypeError` | 传入的负载类型与事件声明中定义的 `payload_type` 不匹配。 |

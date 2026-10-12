@@ -1012,6 +1012,39 @@ async def test_task_hook_pairing_on_shutdown_cancel(
 
 
 @pytest.mark.asyncio
+async def test_stop_reclaim_delay_honored(
+    base_event_registry: EventRegistry, handler_registry: EventHandlerRegistry
+) -> None:
+    """回收延时：task_reclaim_delay 在确定性回收前被真实等待（取消路径）。"""
+    spy = _TaskPipelineSpy()
+    chain = MiddlewareChain()
+    await chain.add(spy)
+    blocker = BlockingHandler(subscriptions=['test.block'])
+    await handler_registry.register(blocker)
+    bus = EventBus(
+        base_event_registry,
+        handler_registry,
+        queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+        max_handler_semaphore=1,
+        shutdown=ShutdownConfig(tasks_timeout=0.1, task_reclaim_delay=0.1),
+        middleware_chain=chain,
+    )
+    await bus.start()
+    await bus.proxy('p').publish('test.block', None)
+    await wait_for_condition(lambda: len(spy.starts) == 1)
+
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    await bus.stop()
+    elapsed = loop.time() - started
+
+    # tasks_timeout(0.1) + task_reclaim_delay(0.1)，容差下界
+    assert elapsed >= 0.15
+    assert bus.active_task_count == 0
+    assert len(spy.dones) == 1 and spy.dones[0].outcome == 'cancelled'
+
+
+@pytest.mark.asyncio
 async def test_task_pipeline_hot_add_remove(event_bus: EventBus, handler_registry: EventHandlerRegistry) -> None:
     """运行时增删中间件：任务管道钩子对后续任务即时生效/失效（链缓存失效）。"""
     spy = _TaskPipelineSpy()

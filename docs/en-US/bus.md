@@ -238,6 +238,7 @@ class ShutdownConfig(BaseModel):
     queue_timeout_min: float = 1.0
     queue_timeout_max: float = 15.0
     tasks_timeout: float = 15.0
+    task_reclaim_delay: float = 0.0
     avg_wait_time: float = 0.05
 ```
 
@@ -246,6 +247,7 @@ class ShutdownConfig(BaseModel):
 | `queue_timeout_min` | `float` | `1.0` | Minimum queue drain wait (seconds). |
 | `queue_timeout_max` | `float` | `15.0` | Maximum queue drain wait (seconds). |
 | `tasks_timeout` | `float` | `15.0` | Active handler task completion wait (seconds). |
+| `task_reclaim_delay` | `float` | `0.0` | Extra settle time before task reclamation, letting completion callbacks (and task-error logs) run first (seconds); `0` yields the event loop once. |
 | `avg_wait_time` | `float` | `0.05` | Estimated per-event processing time (seconds), used for dynamic queue drain timeout calculation. |
 
 Actual queue drain timeout = `max(queue_timeout_min, min(queue_timeout_max, queue_size × avg_wait_time))`.
@@ -256,7 +258,10 @@ Actual queue drain timeout = `max(queue_timeout_min, min(queue_timeout_max, queu
 
 | Exception | When |
 | - | - |
-| `BusShuttingDown` | Publish attempted while bus is stopping. Inherits from `Exception`. Callers should catch and perform cleanup. |
+| `BusError` | Base class for all `Bus*` exceptions below. |
+| `BusShuttingDown` | Publish attempted while bus is stopping. Callers should catch and perform cleanup. |
+| `BusStartFailed` | Start failed with a complete rollback; carries `original_error` (also chained via `__cause__`). |
+| `BusStartRollbackError` | Start failed and the rollback itself was incomplete; aggregates `original_error`, `handler_failures`, and `middleware_failures`. |
 | `RuntimeError` | Publish attempted before bus has started. |
 | `ValueError` | Unknown event name, or payload mismatch (required vs. provided). |
 | `TypeError` | Payload type doesn't match the event declaration. |
