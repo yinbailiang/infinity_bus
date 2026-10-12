@@ -3,7 +3,10 @@
 __version__ = '5.0.0'
 
 from .bus import (
+    BusError,
     BusShuttingDown,
+    BusStartFailed,
+    BusStartRollbackError,
     EventBus,
     ShutdownConfig,
     ShutdownEvent,
@@ -22,10 +25,13 @@ from .handler import (
 )
 from .middleware import (
     BeforePublishNext,
+    DispatchNext,
     Middleware,
     MiddlewareChain,
     OnPublishErrorNext,
     OnPublishNext,
+    TaskOutcome,
+    TaskRecord,
 )
 from .queue import (
     EventQueue,
@@ -52,11 +58,17 @@ __all__: list[str] = [
     'BeforePublishNext',
     'OnPublishNext',
     'OnPublishErrorNext',
+    'DispatchNext',
+    'TaskOutcome',
+    'TaskRecord',
     'EventQueue',
     'InMemoryEventQueue',
     'InMemoryEventQueueConfig',
     'EventBus',
+    'BusError',
     'BusShuttingDown',
+    'BusStartFailed',
+    'BusStartRollbackError',
     'ShutdownEvent',
     'TaskErrorPayload',
     'TaskErrorEvent',

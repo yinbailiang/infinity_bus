@@ -80,6 +80,18 @@ class Middleware(ABC):
         source: str,
         data: dict[str, Any] | BaseModel | None,
     ) -> None: ...
+
+    # Task pipeline hooks (optional)
+    async def before_dispatch(
+        self,
+        event: Event,
+        handler_ids: list[str],
+        next: DispatchNext,
+    ) -> None: ...
+
+    async def on_task_start(self, record: TaskRecord) -> None: ...
+
+    async def on_task_done(self, record: TaskRecord) -> None: ...
 ```
 
 ### Hook Details
@@ -124,6 +136,34 @@ Called when the publish flow raises an exception (optional). All middlewares are
 | `name` | Event type name. |
 | `source` | Publisher identifier. |
 | `data` | Raw payload data. |
+
+#### `before_dispatch(event, handler_ids, next)`
+
+Runs **before** task creation, right after route matching. Call `await next(event, handler_ids)` to proceed; **the chain end creates one task per id, in list order** (pass a filtered / reordered list if needed). Not calling `next` **blocks** this dispatch (the event is dropped — compensate in your middleware, and log it yourself if you need an audit trail).
+
+> **Warning**: This hook runs on the dispatch-loop coroutine — a critical path. Return quickly, or offload heavy work via `asyncio.create_task`, otherwise you throttle the entire dispatch rate.
+
+| Parameter | Description |
+| - | - |
+| `event` | Dequeued, route-matched Event (tasks not yet created; zero-match events are also observable). |
+| `handler_ids` | Matched handler ids; the list passed to `next` determines task creation order. |
+| `next` | Invoke next middleware (or the chain end that creates tasks for the final id list). |
+
+#### `on_task_start(record)`
+
+Task-**start** hook (notification, optional) — fires **after the task acquires the concurrency semaphore**, right before `handle()`. On entry, `record.outcome` / `duration_seconds` are `None`; semaphore wait time is derivable as `started_at - dispatched_at`. Strictly paired with `on_task_done`; hook errors are isolated per middleware and never affect task execution.
+
+#### `on_task_done(record)`
+
+Task-**reclaim** hook (notification, optional) — fires when the task ends (success / error / timeout / cancellation / shutdown skip) with the **same record instance** as `on_task_start`, now filled in:
+
+| Field | Description |
+| - | - |
+| `outcome` | `success` / `error` / `cancelled` / `skipped` (publish rejected during shutdown). |
+| `duration_seconds` | Execution duration in seconds. |
+| `error_type` / `error_message` | Error info (when `outcome=error`). |
+
+Tasks cancelled while waiting for the semaphore (never started) do not fire — strictly paired with `on_task_start`. Hook errors are isolated the same way and never change the task outcome.
 
 ---
 
@@ -170,6 +210,9 @@ class MiddlewareChain:
 | `build_before_publish(f)` | Build the `before_publish` chain with `f` as the innermost handler. |
 | `build_on_publish(f)` | Build the `on_publish` chain with `f` as the innermost handler. |
 | `build_on_publish_error(f)` | Build the `on_publish_error` chain with `f` as the innermost handler. |
+| `build_dispatch(f)` | Build the `before_dispatch` chain; the innermost handler creates tasks for the final id list. |
+| `build_task_start(f)` | Build the `on_task_start` notification chain (per-middleware error isolation, always continues). |
+| `build_task_done(f)` | Build the `on_task_done` notification chain (per-middleware error isolation, always continues). |
 | `setup(bus)` | Call `on_setup` on all middlewares in registration order. **Atomic (fail-fast)**: if any `on_setup` raises, the chain unbinds and fires `on_teardown` on every middleware already attempted (including the failing one), then re-raises — middlewares stay in the chain so you can fix and retry. Consistent with handler `activate`. |
 | `teardown(bus)` | Call `on_teardown` on all middlewares in **reverse** order. **Idempotent**. Returns `[(middleware, exception), ...]` so callers (e.g. `EventBus.stop()`) can observe incomplete cleanup; pass `strict=True` to raise the first failure after attempting all. |
 
@@ -201,7 +244,9 @@ await chain.clear()
 ### Building the Chain
 
 On each publish, `build_before_publish()`, `build_on_publish()`, and
-`build_on_publish_error()` lazily construct the chain. Results are cached
+`build_on_publish_error()` lazily construct the chain. The same applies to
+dispatch and task lifecycle: `build_dispatch()` (per dispatch),
+`build_task_start()` / `build_task_done()` (per task). Results are cached
 and auto-invalidated when the middleware list changes.
 
 ---

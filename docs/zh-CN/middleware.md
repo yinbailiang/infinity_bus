@@ -73,6 +73,18 @@ class Middleware(ABC):
         source: str,
         data: dict[str, Any] | BaseModel | None,
     ) -> None: ...
+
+    # 任务管道钩子（可选）
+    async def before_dispatch(
+        self,
+        event: Event,
+        handler_ids: list[str],
+        next: DispatchNext,
+    ) -> None: ...
+
+    async def on_task_start(self, record: TaskRecord) -> None: ...
+
+    async def on_task_done(self, record: TaskRecord) -> None: ...
 ```
 
 ### 钩子详解
@@ -117,6 +129,34 @@ class Middleware(ABC):
 | `name` | 事件名称。 |
 | `source` | 发布者标识。 |
 | `data` | 原始负载数据。 |
+
+#### `before_dispatch(event, handler_ids, next)`
+
+分发**前**钩子 —— 路由匹配完成后、创建处理器任务前执行。调用 `await next(event, handler_ids)` 进入下一个中间件；**链末端按传入的 id 顺序逐个创建任务**（可传过滤 / 重排后的列表）；不调用 `next` 即**阻断**本次派发（事件被丢弃，由中间件自行补偿，建议自行记录以便审计）。
+
+> **警告**：本钩子在分发循环协程内执行，处于关键路径——应快速返回，或自行 `asyncio.create_task` 卸载耗时工作，否则将拖慢整个分发节奏。
+
+| 参数 | 说明 |
+| - | - |
+| `event` | 已出队、路由匹配后的 Event（此时任务尚未创建；零匹配事件也会触发）。 |
+| `handler_ids` | 匹配到的处理器 id 列表；`next` 接收到的新列表顺序即任务创建顺序。 |
+| `next` | 调用下一个中间件（或链末端：按最终 id 列表创建任务）。不调用即阻断。 |
+
+#### `on_task_start(record)`
+
+任务**开始**钩子（通知式，可选实现）—— 处理器任务**获取并发信号量后**、执行 `handle()` 前触发。触发时 `record.outcome` / `duration_seconds` 等结束字段为 `None`；信号量排队时长可由 `started_at - dispatched_at` 推导。与 `on_task_done` **严格配对**，钩子异常被逐中间件隔离记录，不影响任务执行。
+
+#### `on_task_done(record)`
+
+任务**回收**钩子（通知式，可选实现）—— 任务结束时（成功 / 异常 / 超时 / 取消 / 停机跳过）触发，收到与 `on_task_start` **同一记录实例**，已补齐：
+
+| 字段 | 说明 |
+| - | - |
+| `outcome` | `success` / `error` / `cancelled` / `skipped`（停机期间发布被拒）。 |
+| `duration_seconds` | 开始执行到结束的时长（秒）。 |
+| `error_type` / `error_message` | 异常信息（`outcome=error` 时）。 |
+
+等待信号量期间即被取消、从未开始的任务不会触发（与 `on_task_start` 严格配对）；钩子异常同样被隔离记录，不改变任务结果。
 
 ---
 
@@ -166,12 +206,15 @@ class MiddlewareChain:
 | `build_before_publish(final_handler)` | 构建 ``before_publish`` 责任链。传入核心发布逻辑作为末端处理器，返回包装后的可调用链。 |
 | `build_on_publish(final_handler)` | 构建 ``on_publish`` 责任链。传入空操作作为末端处理器，返回包装后的可调用链。 |
 | `build_on_publish_error(final_handler)` | 构建 ``on_publish_error`` 责任链。传入空操作作为末端处理器，返回包装后的可调用链。 |
+| `build_dispatch(final_handler)` | 构建 ``before_dispatch`` 责任链（链末端为「按 id 列表创建任务」的总线逻辑）。 |
+| `build_task_start(final_handler)` | 构建 ``on_task_start`` 通知链（逐中间件错误隔离后继续）。 |
+| `build_task_done(final_handler)` | 构建 ``on_task_done`` 通知链（逐中间件错误隔离后继续）。 |
 | `setup(bus)` | 按注册顺序调用所有中间件的 `on_setup`。**原子（fail-fast）**：任一 `on_setup` 抛错即解绑，并对**已尝试的中间件（含失败者）**补发 `on_teardown` 后向上抛出——中间件保留在链中（修复后可重试），与处理器 `activate` 语义一致。 |
 | `teardown(bus)` | 按注册**逆序**调用所有中间件的 `on_teardown`。单个异常不影响其他。**幂等**。返回 `[(middleware, 异常), ...]` 失败清单，调用方（如 `EventBus.stop()`）可感知清理不完整；传 `strict=True` 在全部尝试后抛出首个失败。 |
 
 ### 责任链构建
 
-每次发布时，`build_before_publish()`、`build_on_publish()` 和 `build_on_publish_error()` 会惰性构建责任链。构建结果被缓存，当中间件列表变更时自动失效。总线内部在每次发布前通过这三个方法将中间件列表包装为可调用的洋葱链。
+每次发布时，`build_before_publish()`、`build_on_publish()` 和 `build_on_publish_error()` 会惰性构建责任链；分发与任务生命周期同理——`build_dispatch()`（每次分发）、`build_task_start()` / `build_task_done()`（每个任务）。构建结果被缓存，当中间件列表变更时自动失效。总线内部在发布 / 分发 / 任务三个时机通过对应方法将中间件列表包装为可调用链。
 
 ---
 

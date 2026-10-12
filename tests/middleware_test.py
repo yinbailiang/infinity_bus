@@ -1,6 +1,7 @@
 """Middleware / MiddlewareChain 单元测试 + 与 EventBus 集成测试。"""
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -8,6 +9,8 @@ from conftest import SimplePingHandler
 from pydantic import BaseModel
 
 from infinity_bus import (
+    BusStartFailed,
+    DispatchNext,
     Event,
     EventBus,
     EventHandlerRegistry,
@@ -16,6 +19,7 @@ from infinity_bus import (
     InMemoryEventQueueConfig,
     Middleware,
     MiddlewareChain,
+    TaskRecord,
 )
 from infinity_bus.middleware import BeforePublishNext, OnPublishNext
 
@@ -748,6 +752,106 @@ class TestMiddlewareChainError:
 
 
 # ============================================================================
+# 任务管道链测试（before_dispatch / on_task_start / on_task_done）
+# ============================================================================
+
+
+class _TaskNotifyRecorder(LoggingMiddleware):
+    """记录任务通知的轻量中间件（链级单测用）。"""
+
+    def __init__(self, name: str, log: List[str]) -> None:
+        super().__init__(name)
+        self._task_log = log
+
+    async def on_task_start(self, record: TaskRecord) -> None:
+        self._task_log.append(f'{self.name}:start')
+
+    async def on_task_done(self, record: TaskRecord) -> None:
+        self._task_log.append(f'{self.name}:done')
+
+
+class TestMiddlewareChainTaskPipeline:
+    """任务管道链构建、缓存失效与隔离语义"""
+
+    @staticmethod
+    def _record() -> TaskRecord:
+        now = datetime.now(timezone.utc)
+        return TaskRecord(
+            handler_id='hid',
+            handler_name='H',
+            event=Event(name='test.event'),
+            dispatched_at=now,
+            started_at=now,
+        )
+
+    @pytest.mark.asyncio
+    async def test_build_dispatch_cache_and_invalidation(self) -> None:
+        """build_dispatch 带缓存；中间件变更后自动重建（失效）。"""
+        chain = MiddlewareChain()
+        calls: List[List[str]] = []
+
+        async def final(event: Event, handler_ids: List[str]) -> None:
+            calls.append(list(handler_ids))
+
+        built1 = chain.build_dispatch(final)
+        assert chain.build_dispatch(final) is built1  # 缓存命中
+
+        await chain.add(LoggingMiddleware('x'))
+        built2 = chain.build_dispatch(final)
+        assert built2 is not built1  # 变更后重建
+
+        await built2(Event(name='test.event'), ['h1', 'h2'])
+        assert calls == [['h1', 'h2']]  # 默认直通（LoggingMiddleware 未覆写 before_dispatch）
+
+    @pytest.mark.asyncio
+    async def test_build_dispatch_short_circuit(self) -> None:
+        """before_dispatch 不调用 next 即短路：final 不被调用。"""
+
+        class _BlockMW(LoggingMiddleware):
+            async def before_dispatch(self, event: Event, handler_ids: List[str], next: DispatchNext) -> None:
+                return  # 阻断
+
+        chain = MiddlewareChain()
+        await chain.add(_BlockMW('block'))
+        called = False
+
+        async def final(event: Event, handler_ids: List[str]) -> None:
+            nonlocal called
+            called = True
+
+        await chain.build_dispatch(final)(Event(name='test.event'), ['h1'])
+        assert not called
+
+    @pytest.mark.asyncio
+    async def test_build_task_notify_isolates_and_continues(self) -> None:
+        """任务通知链：单个中间件钩子异常被隔离，后续中间件与末端仍被通知。"""
+
+        class _BadNotify(LoggingMiddleware):
+            async def on_task_start(self, record: TaskRecord) -> None:
+                raise RuntimeError('start boom')
+
+            async def on_task_done(self, record: TaskRecord) -> None:
+                raise RuntimeError('done boom')
+
+        chain = MiddlewareChain()
+        log: List[str] = []
+        await chain.add(_BadNotify('bad'))
+        await chain.add(_TaskNotifyRecorder('good', log))
+
+        async def final_start(record: TaskRecord) -> None:
+            log.append('final:start')
+
+        async def final_done(record: TaskRecord) -> None:
+            log.append('final:done')
+
+        record = self._record()
+        await chain.build_task_start(final_start)(record)
+        await chain.build_task_done(final_done)(record)
+
+        assert log == ['good:start', 'final:start', 'good:done', 'final:done']
+
+
+# ============================================================================
 # Middleware 基类默认实现测试
 # ============================================================================
 
@@ -1071,7 +1175,7 @@ class TestMiddlewareIntegration:
             queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
             middleware_chain=chain,
         )
-        with pytest.raises(RuntimeError, match='fail setup failed'):
+        with pytest.raises(BusStartFailed, match='fail setup failed'):
             await bus.start()
 
         # 已整体回滚：未运行、中间件与注册表均已解绑，可重试

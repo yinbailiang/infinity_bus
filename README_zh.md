@@ -32,7 +32,7 @@
 | - | - |
 | 类型安全 | Pydantic 负载校验 · pyright **strict** · **业务代码零** `# type: ignore` |
 | 灵活订阅 | **正则表达式**匹配事件名 · 通配符处理器 |
-| 中间件管道 | 洋葱模型 · `before_publish` / `on_publish` 双钩子 · 5+ 内置中间件 |
+| 中间件管道 | 洋葱模型 · 发布 / 派发 / 任务全链路钩子 · 5+ 内置中间件 |
 | 高级模板 | `handler` 简化 API · `expect` 一次性监听 · `request` RPC 调用 · `pipe` 双向管道 · `register` 批量注册 |
 | 生产可靠 | 优雅停机 · 背压控制 · 超时保护 · 错误隔离 · 可观测性 |
 | 工程纪律 | 90%+ 测试覆盖 · 85%+ docstring 覆盖 · pre-commit 自动门禁 |
@@ -48,7 +48,7 @@
 | 类型安全 | ✅ pyright strict · 业务零 `type: ignore` | ⚠️ pyright strict · 业务 ~30 处遮蔽 | ✅ mypy + pyright | ❌ 无类型注解 |
 | 负载校验 | ✅ Pydantic 自动校验 | ✅ Pydantic 自动校验 | ❌ 无 | ❌ 无（任意对象） |
 | 订阅方式 | 正则表达式 | 类名 + 通配符 `*` | 字符串精确匹配 | 主题层级（`a.b.c`） |
-| 中间件管道 | ✅ 洋葱模型双钩子 | ❌ | ❌ | ❌ |
+| 中间件管道 | ✅ 洋葱模型多阶段钩子 | ❌ | ❌ | ❌ |
 | 高级模板 | ✅ handler/expect/request/pipe/register | ⚠️ 仅 `bus.expect()` | ❌ | ❌ |
 | 事件返回值 | ⚠️ 通过 `request` 模板 | ✅ 内置 `event.event_result()` | ❌ | ❌ |
 | 事件转发 | ⚠️ EventForwardMiddleware | ✅ 内置 `event.forward_to()` | ❌ | ❌ |
@@ -259,7 +259,7 @@ asyncio.run(main())
 | **Router** | 仅含激活订阅的路由表（`Router` + `Subscriptions`）；预计算分派表、版本感知 |
 | **EventQueue** | 可替换的派发队列抽象：`EventQueue` ABC + `InMemoryEventQueue` 默认实现（配置归队列自身） |
 | **EventBus** | 事件分发中枢：并发控制、错误上报、生命周期（队列 / `router` 可注入） |
-| **Middleware** | 中间件基类，洋葱管道：`before_publish` / `on_publish` 双钩子 |
+| **Middleware** | 中间件基类，洋葱管道 + 任务管道：发布 / 派发 / 任务生命周期钩子 |
 | **MiddlewareChain** | 责任链管理器，按序包裹发布流程 |
 | **templates** | 高级模板：`handler` 简化 API、`expect` 监听、`request` RPC、`pipe` 管道、`register` 批量注册 |
 | **middlewares** | 内置中间件：日志(JSONL+SQLite)、限流、转换、屏蔽、递归防护 |

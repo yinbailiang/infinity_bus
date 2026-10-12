@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .event import Event, EventRegistry
 
@@ -31,6 +32,36 @@ OnPublishErrorNext = Callable[
     Awaitable[None],
 ]
 """on_publish_error 链中 next 回调的签名"""
+
+TaskOutcome = Literal['success', 'error', 'cancelled', 'skipped']
+"""任务结果：成功 / 异常 / 取消 / 停机跳过（BusShuttingDown）。"""
+
+
+class TaskRecord(BaseModel):
+    """处理器任务的生命周期记录（``on_task_start`` / ``on_task_done`` 钩子载荷）。
+
+    同一实例先传给 ``on_task_start``（此时 ``outcome`` / ``duration_seconds`` /
+    ``error_type`` / ``error_message`` 为 ``None``）；任务结束时传给 ``on_task_done``
+    时已补齐上述字段。信号量排队时长可由 ``started_at - dispatched_at`` 推导
+    （``started_at`` 为获取信号量、真正开始的时刻）。
+    """
+
+    handler_id: str = Field(description='注册表分配的处理器 id')
+    handler_name: str = Field(description='处理器类名')
+    event: Event = Field(description='触发本次任务的原始事件')
+    dispatched_at: datetime = Field(description='任务创建（派发）时刻（UTC）')
+    started_at: datetime = Field(description='获取并发信号量、开始执行的时刻（UTC）')
+    outcome: Optional[TaskOutcome] = Field(default=None, description='任务结果（on_task_done 时补齐）')
+    duration_seconds: Optional[float] = Field(default=None, description='开始执行到结束的时长（秒）')
+    error_type: Optional[str] = Field(default=None, description='异常类型名（outcome=error 时）')
+    error_message: Optional[str] = Field(default=None, description='异常消息（outcome=error 时）')
+
+
+DispatchNext = Callable[[Event, list[str]], Awaitable[None]]
+"""before_dispatch 链中 next 回调的签名：事件 + 最终派发集合（可过滤/重排）。"""
+
+TaskNotifyNext = Callable[[TaskRecord], Awaitable[None]]
+"""on_task_start / on_task_done 链中 next 回调的签名"""
 
 
 class Middleware(ABC):
@@ -92,6 +123,45 @@ class Middleware(ABC):
         """发布流程中发生异常时回调。"""
         pass
 
+    async def before_dispatch(
+        self,
+        event: Event,
+        handler_ids: list[str],
+        next: DispatchNext,
+    ) -> None:
+        """分发**前**钩子 —— 路由匹配完成后、创建处理器任务前执行。
+
+        调用 ``await next(event, handler_ids)`` 进入下一个中间件（链末端按传入的
+        ``handler_ids`` 顺序逐个创建任务）：可传入过滤 / 重排后的新列表；不调用
+        ``next`` 即**阻断**本次派发（事件被丢弃，由中间件自行补偿）。
+
+        .. warning::
+
+           本钩子在分发循环协程内执行，处于关键路径——应快速返回或自行
+           ``asyncio.create_task`` 卸载耗时工作，否则将拖慢整个分发节奏。
+        """
+        await next(event, handler_ids)
+
+    async def on_task_start(self, record: TaskRecord) -> None:
+        """任务**开始**钩子 —— 处理器任务获取并发信号量后、执行 ``handle`` 前调用（通知式）。
+
+        触发时 ``record.outcome`` 等结束字段尚未填充。钩子异常被逐中间件隔离
+        记录，不影响任务执行。与 :meth:`on_task_done` **严格配对**：本钩子触发过
+        的任务必然收到对应的 ``on_task_done``。
+        """
+        pass
+
+    async def on_task_done(self, record: TaskRecord) -> None:
+        """任务**回收**钩子 —— 任务结束时（成功 / 异常 / 超时 / 取消 / 停机跳过）调用（通知式）。
+
+        收到的是 ``on_task_start`` 的同一记录实例，已补齐 ``outcome`` /
+        ``duration_seconds`` / ``error_type`` / ``error_message``。在任务
+        ``finally`` 路径保证触发（含被取消的任务）；等待信号量期间即被取消、
+        从未开始的任务不会触发（与 :meth:`on_task_start` 严格配对）。
+        钩子异常被逐中间件隔离记录，不改变任务结果。
+        """
+        pass
+
 
 class MiddlewareChain:
     """中间件链管理器。"""
@@ -102,12 +172,18 @@ class MiddlewareChain:
         self._cached_before: BeforePublishNext | None = None
         self._cached_on: OnPublishNext | None = None
         self._cached_on_error: OnPublishErrorNext | None = None
+        self._cached_dispatch: DispatchNext | None = None
+        self._cached_task_start: TaskNotifyNext | None = None
+        self._cached_task_done: TaskNotifyNext | None = None
 
     def _invalidate(self) -> None:
         """清空缓存（中间件列表变更时调用）。"""
         self._cached_before = None
         self._cached_on = None
         self._cached_on_error = None
+        self._cached_dispatch = None
+        self._cached_task_start = None
+        self._cached_task_done = None
 
     async def add(self, middleware: Middleware) -> 'MiddlewareChain':
         """在链**末尾**追加一个中间件。"""
@@ -280,6 +356,42 @@ class MiddlewareChain:
             self._cached_on_error = handler
         return self._cached_on_error
 
+    def build_dispatch(
+        self,
+        final_handler: DispatchNext,
+    ) -> DispatchNext:
+        """构建 ``before_dispatch`` 责任链（带缓存，中间件变更后自动重建）。"""
+        if self._cached_dispatch is None:
+            handler = final_handler
+            for mw in reversed(self._middlewares):
+                handler = self._wrap_dispatch(mw, handler)
+            self._cached_dispatch = handler
+        return self._cached_dispatch
+
+    def build_task_start(
+        self,
+        final_handler: TaskNotifyNext,
+    ) -> TaskNotifyNext:
+        """构建 ``on_task_start`` 通知链（带缓存，逐中间件错误隔离后继续）。"""
+        if self._cached_task_start is None:
+            handler = final_handler
+            for mw in reversed(self._middlewares):
+                handler = self._wrap_task_start(mw, handler)
+            self._cached_task_start = handler
+        return self._cached_task_start
+
+    def build_task_done(
+        self,
+        final_handler: TaskNotifyNext,
+    ) -> TaskNotifyNext:
+        """构建 ``on_task_done`` 通知链（带缓存，逐中间件错误隔离后继续）。"""
+        if self._cached_task_done is None:
+            handler = final_handler
+            for mw in reversed(self._middlewares):
+                handler = self._wrap_task_done(mw, handler)
+            self._cached_task_done = handler
+        return self._cached_task_done
+
     @staticmethod
     def _wrap_before(
         middleware: Middleware,
@@ -348,5 +460,66 @@ class MiddlewareChain:
                     middleware.__class__.__name__,
                 )
             await next_handler(error, name, source, data)
+
+        return wrapped
+
+    @staticmethod
+    def _wrap_dispatch(
+        middleware: Middleware,
+        next_handler: DispatchNext,
+    ) -> DispatchNext:
+        """将一个中间件的 before_dispatch 包裹在 next_handler 之外。"""
+
+        async def wrapped(
+            event: Event,
+            handler_ids: list[str],
+        ) -> None:
+            await middleware.before_dispatch(
+                event,
+                handler_ids,
+                next_handler,
+            )
+
+        return wrapped
+
+    @staticmethod
+    def _wrap_task_start(
+        middleware: Middleware,
+        next_handler: TaskNotifyNext,
+    ) -> TaskNotifyNext:
+        """将一个中间件的 on_task_start 包裹在 next_handler 之外（错误隔离，链路继续）。"""
+
+        async def wrapped(
+            record: TaskRecord,
+        ) -> None:
+            try:
+                await middleware.on_task_start(record)
+            except Exception:
+                logger.exception(
+                    'Middleware %s on_task_start failed',
+                    middleware.__class__.__name__,
+                )
+            await next_handler(record)
+
+        return wrapped
+
+    @staticmethod
+    def _wrap_task_done(
+        middleware: Middleware,
+        next_handler: TaskNotifyNext,
+    ) -> TaskNotifyNext:
+        """将一个中间件的 on_task_done 包裹在 next_handler 之外（错误隔离，链路继续）。"""
+
+        async def wrapped(
+            record: TaskRecord,
+        ) -> None:
+            try:
+                await middleware.on_task_done(record)
+            except Exception:
+                logger.exception(
+                    'Middleware %s on_task_done failed',
+                    middleware.__class__.__name__,
+                )
+            await next_handler(record)
 
         return wrapped

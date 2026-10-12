@@ -8,17 +8,69 @@ from pydantic import BaseModel, Field
 
 from .event import Event, EventDeclaration, EventRegistry
 from .handler import EventHandler, EventHandlerRegistry
-from .middleware import MiddlewareChain
+from .middleware import Middleware, MiddlewareChain, TaskRecord
 from .queue import EventQueue, InMemoryEventQueue
 from .router import Router
 
 logger = logging.getLogger(__name__)
 
 
-class BusShuttingDown(Exception):
+class BusError(Exception):
+    """总线异常基类：``infinity_bus`` 抛出的所有总线级异常均为其子类。"""
+
+    pass
+
+
+class BusShuttingDown(BusError):
     """总线正在停止，拒绝新发布，请求处理器执行清理并退出"""
 
     pass
+
+
+class BusStartFailed(BusError):
+    """总线启动失败（回滚完整）时抛出。
+
+    由 :meth:`EventBus.start` 在任一启动环节失败、且回滚已把总线恢复到
+    可重试的「未启动」态时抛出；携带触发回滚的原始启动异常（同步挂在
+    ``__cause__`` 链上）。
+
+    - :attr:`original_error`：原始启动异常。
+    """
+
+    def __init__(self, original_error: BaseException) -> None:
+        super().__init__(f'EventBus start failed: {type(original_error).__name__}: {original_error}')
+        self.original_error: BaseException = original_error
+
+
+class BusStartRollbackError(BusError):
+    """总线启动失败且回滚不完整时抛出：聚合原始启动异常与回滚阶段的清理失败。
+
+    仅在 ``start()`` 失败、且回滚过程存在清理失败时抛出（回滚干净时原样重抛
+    原始异常）；原始异常同步挂在 ``__cause__`` 链上。
+
+    - :attr:`original_error`：触发回滚的原始启动异常；
+    - :attr:`handler_failures`：``[(handler_id, 异常), ...]``——回滚中
+      ``on_deactivate`` 失败（按文档保留在册）的处理器清单；
+    - :attr:`middleware_failures`：``[(中间件实例, 异常), ...]``——回滚中
+      ``on_teardown`` 失败的清单。
+    """
+
+    def __init__(
+        self,
+        original_error: BaseException,
+        handler_failures: list[tuple[str, Exception]],
+        middleware_failures: list[tuple['Middleware', Exception]],
+    ) -> None:
+        message = (
+            f'EventBus start failed and rollback was incomplete: '
+            f'{type(original_error).__name__}: {original_error}; '
+            f'{len(handler_failures)} handler deactivation failure(s), '
+            f'{len(middleware_failures)} middleware teardown failure(s)'
+        )
+        super().__init__(message)
+        self.original_error: BaseException = original_error
+        self.handler_failures: list[tuple[str, Exception]] = handler_failures
+        self.middleware_failures: list[tuple['Middleware', Exception]] = middleware_failures
 
 
 class ShutdownEvent(EventDeclaration):
@@ -209,6 +261,12 @@ class EventBus:
     ) -> None:
         """on_publish 链的末端处理器（空操作）"""
 
+    @staticmethod
+    async def _noop_task_notify(
+        record: TaskRecord,
+    ) -> None:
+        """task 通知链（on_task_start / on_task_done）的末端处理器（空操作）"""
+
     @property
     def router(self) -> Router:
         """事件路由器：订阅管理与分派（handler 在 on_activate 时经此登记订阅）。"""
@@ -236,17 +294,24 @@ class EventBus:
                 self._dispatch_task = asyncio.create_task(self._dispatch_loop())
                 self._running.set()
                 self._enable_publish.set()
-            except Exception:
+            except Exception as e:
                 logger.exception('Error occurred while starting event bus')
-                await self._abort_start()
-                raise
+                handler_failures, middleware_failures = await self._abort_start()
+                if handler_failures or middleware_failures:
+                    raise BusStartRollbackError(
+                        original_error=e,
+                        handler_failures=handler_failures,
+                        middleware_failures=middleware_failures,
+                    ) from e
+                raise BusStartFailed(e) from e
             logger.info('EventBus started')
 
-    async def _abort_start(self) -> None:
+    async def _abort_start(self) -> tuple[list[tuple[str, Exception]], list[tuple[Middleware, Exception]]]:
         """启动失败回滚（尽力而为，不掩盖原始错误）。
 
-        撤销调度循环、清理进行中的处理器任务、下线处理器、回滚中间件，
-        使总线回到可重试的「未启动」态。
+        撤销调度循环、清理进行中的处理器任务、下线处理器、回滚中间件，使总线回到
+        可重试的「未启动」态。返回回滚中收集的清理失败清单
+        ``(处理器下线失败, 中间件拆卸失败)``，供 :meth:`start` 聚合为 :class:`BusStartRollbackError`。
         """
         try:
             task = self._dispatch_task
@@ -262,14 +327,17 @@ class EventBus:
             await self._wait_all_tasks_done()
         except Exception:
             logger.exception('Failed to roll back dispatch during start')
+        handler_failures: list[tuple[str, Exception]] = []
         try:
-            await self._handlers.deactivate()
+            handler_failures = await self._handlers.deactivate()
         except Exception:
             logger.exception('Handler deactivation failed during start rollback')
+        middleware_failures: list[tuple[Middleware, Exception]] = []
         try:
-            await self._mw_chain.teardown(self)
+            middleware_failures = await self._mw_chain.teardown(self)
         except Exception:
             logger.exception('Middleware teardown failed during start rollback')
+        return handler_failures, middleware_failures
 
     async def stop(self) -> None:
         """停止事件总线"""
@@ -333,40 +401,92 @@ class EventBus:
         """创建一个事件总线代理实例，供事件处理器调用"""
         return EventBus.Proxy(self, source, raw_event)
 
-    async def _handler_wrapper(self, handler: EventHandler, handler_id: str, bus: 'EventBus', event: Event) -> None:
+    async def _handler_wrapper(
+        self,
+        handler: EventHandler,
+        handler_id: str,
+        bus: 'EventBus',
+        event: Event,
+        dispatched_at: datetime,
+    ) -> None:
         """事件处理器包装器。
 
         接收原始 ``EventBus`` 实例，传递给 ``handler.__call__``。
-        ``__call__`` 内部自行调用 ``bus.proxy()`` 创建代理。
+        任务生命周期钩子在此触达：获取并发信号量后触发 ``on_task_start``；
+        任务结束（成功 / 异常 / 超时 / 取消 / 停机跳过）时在 ``finally``
+        路径触发 ``on_task_done``（与 ``on_task_start`` 严格配对）。
         """
+        record: Optional[TaskRecord] = None
         try:
             async with self._handler_semaphore:  # 控制并发处理器数量，避免过载
-                async with asyncio.timeout(handler.handle_timeout):
-                    await handler(bus, event)
-        except BusShuttingDown:
-            logger.debug(
-                'Handler %s skipped publish during shutdown (event=%s)', handler.__class__.__name__, event.name
-            )
-        except Exception as e:
-            if 'EventBusErrorReporter' not in event.sources:
+                record = TaskRecord(
+                    handler_id=handler_id,
+                    handler_name=handler.__class__.__name__,
+                    event=event,
+                    dispatched_at=dispatched_at,
+                    started_at=datetime.now(timezone.utc),
+                )
+                await self._mw_chain.build_task_start(self._noop_task_notify)(record)
                 try:
-                    await self._publish(
-                        name=TaskErrorEvent.name,
-                        source='EventBusErrorReporter',
-                        data=TaskErrorPayload(
-                            error_event=event,
-                            handler_id=handler_id,
-                            handler_name=handler.__class__.__name__,
-                            error_type=type(e).__name__,
-                            error_message=str(e),
-                        ),
-                        old_event=event,
+                    async with asyncio.timeout(handler.handle_timeout):
+                        await handler(bus, event)
+                except BusShuttingDown:
+                    logger.debug(
+                        'Handler %s skipped publish during shutdown (event=%s)', handler.__class__.__name__, event.name
                     )
-                except BusShuttingDown as err:
-                    logger.warning(f'Skipping task_error publish during shutdown: {err}')
-                except Exception:
-                    logger.exception('Failed to publish task_error event')
+                    record.outcome = 'skipped'
+                except asyncio.CancelledError:
+                    record.outcome = 'cancelled'
+                    raise
+                except Exception as e:
+                    record.outcome = 'error'
+                    record.error_type = type(e).__name__
+                    record.error_message = str(e)
+                    if 'EventBusErrorReporter' not in event.sources:
+                        try:
+                            await self._publish(
+                                name=TaskErrorEvent.name,
+                                source='EventBusErrorReporter',
+                                data=TaskErrorPayload(
+                                    error_event=event,
+                                    handler_id=handler_id,
+                                    handler_name=handler.__class__.__name__,
+                                    error_type=type(e).__name__,
+                                    error_message=str(e),
+                                ),
+                                old_event=event,
+                            )
+                        except BusShuttingDown as err:
+                            logger.warning(f'Skipping task_error publish during shutdown: {err}')
+                        except Exception:
+                            logger.exception('Failed to publish task_error event')
+                    raise
+                else:
+                    record.outcome = 'success'
+                finally:
+                    record.duration_seconds = (datetime.now(timezone.utc) - record.started_at).total_seconds()
+                    await self._mw_chain.build_task_done(self._noop_task_notify)(record)
+        except asyncio.CancelledError:
+            # 取消发生在 on_task_start 之后、内部 try 之前：补齐回收通知（严格配对）
+            if record is not None and record.outcome is None:
+                record.outcome = 'cancelled'
+                record.duration_seconds = (datetime.now(timezone.utc) - record.started_at).total_seconds()
+                await self._mw_chain.build_task_done(self._noop_task_notify)(record)
             raise
+
+    async def _core_dispatch(self, event: Event, handler_ids: list[str]) -> None:
+        """``before_dispatch`` 链末端：按最终处理器 id 列表逐个创建任务并登记。
+
+        本次派发的所有任务共享同一 ``dispatched_at``（分发时刻），供任务记录
+        推导信号量排队时长。
+        """
+        dispatched_at = datetime.now(timezone.utc)
+        for handler_id in handler_ids:
+            handler = self._handlers.get(handler_id)
+            if handler is not None:
+                self._register_task(
+                    asyncio.create_task(self._handler_wrapper(handler, handler_id, self, event, dispatched_at))
+                )
 
     async def _dispatch_loop(self) -> None:
         """事件分发主循环"""
@@ -375,12 +495,11 @@ class EventBus:
             event: Optional[Event] = None
             try:
                 event = await self._queue.get()
-                for handler_id in self._router.match(event.name):
-                    handler = self._handlers.get(handler_id)
-                    if handler is not None:
-                        self._register_task(
-                            asyncio.create_task(self._handler_wrapper(handler, handler_id, self, event))
-                        )
+                handler_ids = self._router.match(event.name)
+                try:
+                    await self._mw_chain.build_dispatch(self._core_dispatch)(event, handler_ids)
+                except Exception:
+                    logger.exception('before_dispatch chain failed (event=%s); event dropped', event.name)
             except Exception:
                 logger.exception('Unexpected error in dispatch loop')
             finally:
@@ -408,7 +527,13 @@ class EventBus:
             logger.exception(f'Handler task failed: {task.get_name()}')
 
     async def _wait_all_tasks_done(self) -> None:
-        """等待所有未完成的任务完成，适用于事件总线停止时调用"""
+        """等待所有未完成的任务完成，适用于事件总线停止时调用。
+
+        对被取消任务**先整体取消、再统一等待**（避免逐个取消时，先取消的任务
+        释放并发信号量、让仍在排队的任务抢先开始执行）；结束后同步摘除已完成
+        任务——完成回调经 ``call_soon`` 调度可能滞后于本函数返回，此处确定性回收
+        （回调仍会幂等执行、异常照常记录）。
+        """
         if self._active_tasks:
             try:
                 logger.info(f'Waiting for {len(self._active_tasks)} active handler tasks to complete...')
@@ -418,13 +543,19 @@ class EventBus:
                 logger.info(f'All handler tasks completed. Total: {len(done)}')
                 if pending:
                     logger.warning(f'Timeout: {len(pending)} tasks pending, cancelling...')
+                    # 先整体取消、再统一等待：避免逐个取消时，先取消的任务释放并发信号量，
+                    # 让仍在排队的任务在轮到其取消前抢先开始执行
                     for task in pending:
                         if not task.done():
                             task.cancel()
-                            try:
-                                await task
-                            except asyncio.CancelledError:
-                                pass
+                    for task in pending:
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                for task in list(self._active_tasks):
+                    if task.done():
+                        self._active_tasks.discard(task)
             except Exception as e:
                 logger.exception('Unexpected error in wait all task done')
                 raise e

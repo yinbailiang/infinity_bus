@@ -32,7 +32,7 @@
 | - | - |
 | Type Safety | Pydantic payload validation · pyright **strict** · **zero** `# type: ignore` in business code |
 | Flexible Subscription | **Regex**-based event name matching · wildcard handlers |
-| Middleware Pipeline | Onion model · `before_publish` / `on_publish` dual hooks · 5+ built-in middlewares |
+| Middleware Pipeline | Onion model · publish / dispatch / task-lifecycle hooks · 5+ built-in middlewares |
 | Advanced Templates | `handler` simplified API · `expect` one-shot listener · `request` RPC call · `pipe` bidirectional channel · `register` batch registration |
 | Production-grade architecture | Graceful shutdown · backpressure control · timeout protection · error isolation · observability |
 | Engineering Discipline | 90%+ test coverage · 85%+ docstring coverage · pre-commit automated gating |
@@ -48,7 +48,7 @@
 | Type Safety | ✅ pyright strict · zero `type: ignore` in business code | ⚠️ pyright strict · ~30 suppressions in business code | ✅ mypy + pyright | ❌ no type annotations |
 | Payload Validation | ✅ Pydantic auto-validation | ✅ Pydantic auto-validation | ❌ none | ❌ none (arbitrary objects) |
 | Subscription Model | Regex | class name + wildcard `*` | exact string match | topic hierarchy (`a.b.c`) |
-| Middleware Pipeline | ✅ onion model dual hooks | ❌ | ❌ | ❌ |
+| Middleware Pipeline | ✅ onion model multi-phase hooks | ❌ | ❌ | ❌ |
 | Advanced Templates | ✅ handler/expect/request/pipe/register | ⚠️ `bus.expect()` only | ❌ | ❌ |
 | Event Return Values | ⚠️ via `request` template | ✅ built-in `event.event_result()` | ❌ | ❌ |
 | Event Forwarding | ⚠️ EventForwardMiddleware | ✅ built-in `event.forward_to()` | ❌ | ❌ |
@@ -261,7 +261,7 @@ asyncio.run(main())
 | **Router** | Activated-only route table (`Router` + `Subscriptions`); precomputed dispatch table, version-aware |
 | **EventQueue** | Replaceable dispatch queue abstraction: `EventQueue` ABC + `InMemoryEventQueue` default (config owned by the queue) |
 | **EventBus** | Event dispatch hub: concurrency control, error reporting, lifecycle (queue / `router` injectable) |
-| **Middleware** | Middleware base class, onion pipeline: `before_publish` / `on_publish` dual hooks |
+| **Middleware** | Middleware base class, onion + task pipelines: publish / dispatch / task-lifecycle hooks |
 | **MiddlewareChain** | Chain of responsibility manager; wraps the publish flow in order |
 | **templates** | Advanced templates: `handler` simplified API, `expect` listener, `request` RPC, `pipe` channel, `register` batch registration |
 | **middlewares** | Built-in middlewares: logging (JSONL+SQLite), rate limiting, transform, block, recursion guard |
