@@ -13,7 +13,7 @@ EventBus 提供了 8 个开箱即用的中间件，覆盖日志、指标、限�
 | `RecursionGuardMiddleware` | `before_publish` | 双重递归检测 | [recursion_guard.md](recursion_guard.md) |
 | `EventBlockMiddleware` | `before_publish` | 按规则屏蔽（丢弃）事件 | [event_block.md](event_block.md) |
 | `EventTransformMiddleware` | `before_publish` | 转换事件名 / 注入 / 脱敏字段 | [event_transform.md](event_transform.md) |
-| `MetricsMiddleware` | `before_publish` + `on_publish` | Prometheus / OTel 风格指标收集 | [metrics.md](metrics.md) |
+| `MetricsMiddleware` | `before_publish` + `on_publish` + `on_task_done` | Prometheus / OTel 风格指标收集 | [metrics.md](metrics.md) |
 | `EventForwardMiddleware` | `on_publish` | 单向跨总线事件转发 | [event_forward.md](event_forward.md) |
 | `JSONLLoggingMiddleware` | `on_publish` | JSONL 文件持久化日志 | [logging.md](logging.md) |
 | `SQLiteLoggingMiddleware` | `on_publish` | SQLite 数据库持久化日志 | [logging.md](logging.md) |
@@ -45,7 +45,8 @@ EventBus 提供了 8 个开箱即用的中间件，覆盖日志、指标、限�
 ```
 
 > **建议注册顺序**：限流 → 递归防护 → 屏蔽 → 转换 → 指标 → 转发 → 日志。
-> 指标中间件横跨 `before_publish`（计时起点）和 `on_publish`（计时终点），
+> 指标中间件横跨 `before_publish`（计时起点）、`on_publish`（计时终点）与
+> `on_task_done`（任务结果 / 执行时长 / 排队时长），
 > 放置在转换之后可确保转换后的新事件名被正确记录在指标中。
 > `on_publish` 阶段的转发和日志中间件顺序：转发在前可确保日志中间仅记录本总线事件。
 

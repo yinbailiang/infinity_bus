@@ -21,6 +21,9 @@ Prometheus scrape endpoints or OTLP Collectors.
 | `infinity_bus_publish_errors_total` | Counter | Publish failure count |
 | `infinity_bus_queue_size` | Gauge | Current event queue depth |
 | `infinity_bus_active_tasks` | Gauge | Current active handler task count |
+| `infinity_bus_task_total` | Counter | Task completion count by handler + outcome (`success` / `error` / `cancelled` / `skipped`) |
+| `infinity_bus_task_duration` | Histogram | Task execution latency (after semaphore acquisition → end) |
+| `infinity_bus_task_wait` | Histogram | Task queue latency (dispatch → semaphore acquisition) |
 
 ---
 
@@ -75,6 +78,9 @@ class MetricsSnapshot(BaseModel):
     publish_errors_total: int               # Total publish failures
     queue_size: int                         # Current queue depth
     active_tasks: int                       # Current active handler tasks
+    task_total: Dict[str, Dict[str, int]]   # {handler_name: {outcome: count}}
+    task_duration_sec: Dict[str, Buckets]   # {handler_name: execution latency histogram}
+    task_wait_sec: Dict[str, Buckets]       # {handler_name: queue latency histogram}
 ```
 
 ### Buckets
@@ -122,6 +128,10 @@ Key points:
    (following the Prometheus `_total` convention).
 3. `queue_size` and `active_tasks` are instantaneous values, retrieved via `snapshot()` or
    Gauge callbacks.
+4. Task metrics are updated in `on_task_done` (notification-style, never affecting task
+   execution): `task_total` counts by outcome; `task_duration` records execution latency
+   (after semaphore acquisition → end); `task_wait` records queue latency (dispatch →
+   semaphore acquisition).
 
 ---
 

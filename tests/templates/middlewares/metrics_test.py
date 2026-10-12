@@ -1,18 +1,26 @@
 """指标中间件测试。"""
 
-from typing import Generator
+import gc
+import weakref
+from typing import Any, Dict, Generator
 
 import pytest
-from conftest import SimplePingHandler
+from conftest import BlockingHandler, CountingHandler, SimplePingHandler, wait_for_condition
+from pydantic import BaseModel
 
 from infinity_bus import (
+    Event,
     EventBus,
     EventHandlerRegistry,
     EventRegistry,
     InMemoryEventQueue,
     InMemoryEventQueueConfig,
+    Middleware,
     MiddlewareChain,
+    ShutdownConfig,
+    TaskRecord,
 )
+from infinity_bus.middleware import BeforePublishNext, OnPublishNext
 from infinity_bus.templates.middlewares import MetricsMiddleware, MetricsSnapshot
 
 
@@ -583,3 +591,246 @@ class TestOpenTelemetryIntegration:
 
         assert metrics.opentelemetry_integrated
         assert metrics._otel_meter is not None  # pyright: ignore[reportPrivateUsage]
+
+
+# ============================================================================
+# 任务管道指标（任务状态 / 执行时长 / 排队时长）
+# ============================================================================
+
+
+class _RecordWeakSpy(Middleware):
+    """记录任务记录实例弱引用的探针中间件（验证无持留）。"""
+
+    def __init__(self) -> None:
+        self.refs: list[weakref.ref[TaskRecord]] = []
+
+    async def before_publish(
+        self,
+        event_registry: EventRegistry,
+        name: str,
+        source: str,
+        data: Dict[str, Any] | BaseModel | None,
+        old_event: Event | None,
+        next: BeforePublishNext,
+    ) -> None:
+        await next(event_registry, name, source, data, old_event)
+
+    async def on_publish(self, event: Event, next: OnPublishNext) -> None:
+        await next(event)
+
+    async def on_task_done(self, record: TaskRecord) -> None:
+        self.refs.append(weakref.ref(record))
+
+
+class TestMetricsTaskPipeline:
+    """on_task_done 驱动的任务状态指标。"""
+
+    @pytest.mark.asyncio
+    async def test_task_success_metrics(
+        self,
+        base_event_registry: EventRegistry,
+        handler_registry: EventHandlerRegistry,
+        metrics: MetricsMiddleware,
+        chain_with_metrics: MiddlewareChain,
+    ) -> None:
+        """成功任务：按结果计数并记录执行/排队时长。"""
+        handler = CountingHandler()
+        await handler_registry.register(handler)
+        bus = EventBus(
+            base_event_registry,
+            handler_registry,
+            queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+            middleware_chain=chain_with_metrics,
+        )
+        async with bus:
+            await bus.proxy('test').publish('test.event', {'value': 1})
+            await wait_for_condition(
+                lambda: metrics.snapshot().task_total.get('CountingHandler', {}).get('success', 0) == 1
+            )
+
+        snap = metrics.snapshot()
+        assert snap.task_total['CountingHandler'] == {'success': 1}
+        assert snap.task_duration_sec['CountingHandler'].count == 1
+        assert snap.task_duration_sec['CountingHandler'].sum >= 0.0
+        assert snap.task_wait_sec['CountingHandler'].count == 1
+        assert snap.task_wait_sec['CountingHandler'].sum >= 0.0
+
+    @pytest.mark.asyncio
+    async def test_task_error_outcome_counted(
+        self,
+        base_event_registry: EventRegistry,
+        handler_registry: EventHandlerRegistry,
+        metrics: MetricsMiddleware,
+        chain_with_metrics: MiddlewareChain,
+    ) -> None:
+        """异常任务：结果计入 error，不影响任务异常语义。"""
+        handler = CountingHandler()
+        await handler_registry.register(handler)
+        bus = EventBus(
+            base_event_registry,
+            handler_registry,
+            queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+            middleware_chain=chain_with_metrics,
+        )
+        async with bus:
+            await bus.proxy('test').publish('test.event', {'value': -1})
+            await wait_for_condition(
+                lambda: metrics.snapshot().task_total.get('CountingHandler', {}).get('error', 0) == 1
+            )
+
+        snap = metrics.snapshot()
+        assert snap.task_total['CountingHandler'] == {'error': 1}
+        assert snap.task_duration_sec['CountingHandler'].count == 1
+
+    @pytest.mark.asyncio
+    async def test_task_cancelled_outcome_counted(
+        self,
+        base_event_registry: EventRegistry,
+        handler_registry: EventHandlerRegistry,
+    ) -> None:
+        """停机取消的任务：结果计入 cancelled。"""
+        metrics = MetricsMiddleware()
+        chain = MiddlewareChain()
+        await chain.add(metrics)
+        blocker = BlockingHandler(subscriptions=['test.block'])
+        await handler_registry.register(blocker)
+        bus = EventBus(
+            base_event_registry,
+            handler_registry,
+            queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+            max_handler_semaphore=1,
+            shutdown=ShutdownConfig(tasks_timeout=0.1),
+            middleware_chain=chain,
+        )
+        await bus.start()
+        await bus.proxy('p').publish('test.block', None)
+        await blocker.wait_started(timeout=2.0)
+        await bus.stop()
+
+        snap = metrics.snapshot()
+        assert snap.task_total['BlockingHandler'] == {'cancelled': 1}
+        assert snap.task_duration_sec['BlockingHandler'].count == 1
+
+    @pytest.mark.asyncio
+    async def test_task_metrics_prometheus(
+        self,
+        base_event_registry: EventRegistry,
+        handler_registry: EventHandlerRegistry,
+    ) -> None:
+        """任务指标桥接到 prometheus_client（带标签）。"""
+        import prometheus_client
+
+        registry = prometheus_client.CollectorRegistry()
+        metrics = MetricsMiddleware()
+        metrics.integrate_prometheus(registry)
+        chain = MiddlewareChain()
+        await chain.add(metrics)
+        handler = CountingHandler()
+        await handler_registry.register(handler)
+        bus = EventBus(
+            base_event_registry,
+            handler_registry,
+            queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+            middleware_chain=chain,
+        )
+        async with bus:
+            await bus.proxy('test').publish('test.event', {'value': 1})
+            await wait_for_condition(
+                lambda: metrics.snapshot().task_total.get('CountingHandler', {}).get('success', 0) == 1
+            )
+
+        assert (
+            registry.get_sample_value('infinity_bus_task_total', {'handler': 'CountingHandler', 'outcome': 'success'})
+            == 1
+        )
+        assert (
+            registry.get_sample_value('infinity_bus_task_duration_seconds_count', {'handler': 'CountingHandler'}) == 1
+        )
+        assert registry.get_sample_value('infinity_bus_task_wait_seconds_count', {'handler': 'CountingHandler'}) == 1
+
+    @pytest.mark.asyncio
+    async def test_task_metrics_otel_mock(
+        self,
+        base_event_registry: EventRegistry,
+        handler_registry: EventHandlerRegistry,
+    ) -> None:
+        """任务指标写入 OTel 仪器（mock 验证）。"""
+        from unittest.mock import MagicMock
+
+        mock_task_counter = MagicMock()
+        mock_task_duration = MagicMock()
+        mock_task_wait = MagicMock()
+
+        metrics = MetricsMiddleware()
+        metrics._otel_counter = MagicMock()
+        metrics._otel_histogram = MagicMock()
+        metrics._otel_errors = MagicMock()
+        metrics._otel_queue_gauge = MagicMock()
+        metrics._otel_tasks_gauge = MagicMock()
+        metrics._otel_task_counter = mock_task_counter
+        metrics._otel_task_duration = mock_task_duration
+        metrics._otel_task_wait = mock_task_wait
+        metrics._otel_integrated = True
+
+        chain = MiddlewareChain()
+        await chain.add(metrics)
+        handler = CountingHandler()
+        await handler_registry.register(handler)
+        bus = EventBus(
+            base_event_registry,
+            handler_registry,
+            queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+            middleware_chain=chain,
+        )
+        async with bus:
+            await bus.proxy('test').publish('test.event', {'value': 1})
+            await wait_for_condition(
+                lambda: metrics.snapshot().task_total.get('CountingHandler', {}).get('success', 0) == 1
+            )
+
+        mock_task_counter.add.assert_any_call(1, {'handler': 'CountingHandler', 'outcome': 'success'})
+        assert mock_task_duration.record.call_count == 1
+        assert mock_task_duration.record.call_args[0][1] == {'handler': 'CountingHandler'}
+        assert mock_task_wait.record.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_task_state_bounded_and_records_released(
+        self,
+        base_event_registry: EventRegistry,
+        handler_registry: EventHandlerRegistry,
+    ) -> None:
+        """内存不泄漏：指标键空间有界（处理器维度）；任务记录不被任何中间件持留（弱引用失效）。"""
+        metrics = MetricsMiddleware()
+        spy = _RecordWeakSpy()
+        chain = MiddlewareChain()
+        await chain.add(metrics)
+        await chain.add(spy)
+
+        counting = CountingHandler()
+        ping = SimplePingHandler()
+        await handler_registry.register(counting)
+        await handler_registry.register(ping)
+        bus = EventBus(
+            base_event_registry,
+            handler_registry,
+            queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+            middleware_chain=chain,
+        )
+        async with bus:
+            for _ in range(3):
+                await bus.proxy('test').publish('test.event', {'value': 1})
+            for _ in range(3):
+                await bus.proxy('test').publish('mw.ping', {'key': 'k', 'count': 1})
+            await wait_for_condition(
+                lambda: metrics.snapshot().task_total.get('CountingHandler', {}).get('success', 0) == 3
+                and metrics.snapshot().task_total.get('SimplePingHandler', {}).get('success', 0) == 3
+            )
+
+        gc.collect()
+        assert len(spy.refs) == 6
+        assert all(ref() is None for ref in spy.refs)  # 全部释放：无中间件持留记录
+
+        snap = metrics.snapshot()
+        assert set(snap.task_total) == {'CountingHandler', 'SimplePingHandler'}  # 键空间仅处理器维度
+        assert snap.task_duration_sec['CountingHandler'].count == 3
+        assert snap.active_tasks == 0

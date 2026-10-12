@@ -19,6 +19,9 @@
 | `infinity_bus_publish_errors_total` | Counter | 发布失败次数 |
 | `infinity_bus_queue_size` | Gauge | 当前事件队列深度 |
 | `infinity_bus_active_tasks` | Gauge | 当前活跃处理器任务数 |
+| `infinity_bus_task_total` | Counter | 按处理器名 + 结果（`success` / `error` / `cancelled` / `skipped`）统计任务完成次数 |
+| `infinity_bus_task_duration` | Histogram | 任务执行耗时（信号量获取后 → 结束） |
+| `infinity_bus_task_wait` | Histogram | 任务排队耗时（派发 → 信号量获取） |
 
 ---
 
@@ -73,6 +76,9 @@ class MetricsSnapshot(BaseModel):
     publish_errors_total: int               # 发布失败总数
     queue_size: int                         # 当前队列深度
     active_tasks: int                       # 当前活跃处理器任务数
+    task_total: Dict[str, Dict[str, int]]   # {处理器名: {结果: 次数}}
+    task_duration_sec: Dict[str, Buckets]   # {处理器名: 执行时长直方图}
+    task_wait_sec: Dict[str, Buckets]       # {处理器名: 排队时长直方图}
 ```
 
 ### Buckets
@@ -117,6 +123,7 @@ sequenceDiagram
 1. 计时从 `before_publish` 进入开始，到核心发布流程结束（含 `on_publish` 链），覆盖完整发布耗时。
 2. 失败发布**同时**计入 `publish_total` 和 `publish_errors_total`（遵循 Prometheus `_total` 惯例）。
 3. `queue_size` 和 `active_tasks` 为瞬时值，通过 `snapshot()` 或 Gauge 回调获取。
+4. 任务指标在 `on_task_done`（通知式，不影响任务执行）中更新：`task_total` 按结果计数；`task_duration` 记录信号量获取后到任务结束的执行耗时；`task_wait` 记录从派发到信号量获取的排队耗时。
 
 ---
 

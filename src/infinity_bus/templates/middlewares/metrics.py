@@ -10,6 +10,9 @@
 - ``infinity_bus_publish_errors_total`` Counter   发布失败次数
 - ``infinity_bus_queue_size``           Gauge     当前队列长度
 - ``infinity_bus_active_tasks``         Gauge     当前活跃处理器任务数
+- ``infinity_bus_task_total``           Counter   按处理器名 + 结果统计任务完成次数
+- ``infinity_bus_task_duration``        Histogram 任务执行耗时（信号量获取后 → 结束）
+- ``infinity_bus_task_wait``            Histogram 任务排队耗时（派发 → 信号量获取）
 
 纯内存使用
 ----------
@@ -67,6 +70,7 @@ from infinity_bus import (
     EventRegistry,
     Middleware,
     OnPublishNext,
+    TaskRecord,
 )
 
 logger = logging.getLogger(__name__)
@@ -135,6 +139,9 @@ class MetricsSnapshot(BaseModel):
     publish_errors_total: int = Field(default=0, description='发布失败总数')
     queue_size: int = Field(default=0, description='当前队列深度')
     active_tasks: int = Field(default=0, description='当前活跃处理器任务数')
+    task_total: Dict[str, Dict[str, int]] = Field(default_factory=dict, description='{处理器名: {任务结果: 次数}}')
+    task_duration_sec: Dict[str, Buckets] = Field(default_factory=dict, description='{处理器名: 任务执行时长直方图}')
+    task_wait_sec: Dict[str, Buckets] = Field(default_factory=dict, description='{处理器名: 排队时长直方图}')
 
 
 # ============================================================================
@@ -163,6 +170,11 @@ class MetricsMiddleware(Middleware):
         self._publish_duration: Dict[str, _Histogram] = {}
         # Counter: 失败
         self._publish_errors_total = 0
+        # Counter: 按处理器与结果（success / error / cancelled / skipped）
+        self._task_total: Dict[str, Dict[str, int]] = {}
+        # Histogram: 按处理器 —— 执行时长 / 排队时长
+        self._task_duration: Dict[str, _Histogram] = {}
+        self._task_wait: Dict[str, _Histogram] = {}
 
         # 总线引用（on_setup 注入），用于读取队列/活跃任务
         self._bus: Optional[EventBus] = None
@@ -174,6 +186,9 @@ class MetricsMiddleware(Middleware):
         self._prom_errors: Any = None
         self._prom_queue_gauge: Any = None
         self._prom_tasks_gauge: Any = None
+        self._prom_task_counter: Any = None
+        self._prom_task_duration: Any = None
+        self._prom_task_wait: Any = None
         self._prom_integrated = False
 
         # —— OpenTelemetry SDK 集成（惰性创建） ——
@@ -183,6 +198,9 @@ class MetricsMiddleware(Middleware):
         self._otel_errors: Any = None
         self._otel_queue_gauge: Any = None
         self._otel_tasks_gauge: Any = None
+        self._otel_task_counter: Any = None
+        self._otel_task_duration: Any = None
+        self._otel_task_wait: Any = None
         self._otel_integrated = False
 
     # ------------------------------------------------------------------
@@ -194,6 +212,19 @@ class MetricsMiddleware(Middleware):
 
     async def on_teardown(self, bus: EventBus) -> None:
         self._bus = None
+
+    # ------------------------------------------------------------------
+    # 内部：直方图观测
+    # ------------------------------------------------------------------
+
+    def _observe(self, histograms: Dict[str, _Histogram], key: str, value: float) -> _Histogram:
+        """按键观测一次直方图（惰性创建）。"""
+        hist = histograms.get(key)
+        if hist is None:
+            hist = _Histogram(self._histogram_bounds)
+            histograms[key] = hist
+        hist.observe(value)
+        return hist
 
     # ------------------------------------------------------------------
     # 发布钩子
@@ -222,11 +253,7 @@ class MetricsMiddleware(Middleware):
             elapsed = time.perf_counter() - t0
             # —— 纯内存 ——
             self._publish_total[name] = self._publish_total.get(name, 0) + 1
-            hist = self._publish_duration.get(name)
-            if hist is None:
-                hist = _Histogram(self._histogram_bounds)
-                self._publish_duration[name] = hist
-            hist.observe(elapsed)
+            self._observe(self._publish_duration, name, elapsed)
             # —— Prometheus SDK ——
             if self._prom_integrated:
                 self._prom_counter.labels(event_name=name).inc()
@@ -242,6 +269,34 @@ class MetricsMiddleware(Middleware):
         next: OnPublishNext,
     ) -> None:
         await next(event)
+
+    async def on_task_done(self, record: TaskRecord) -> None:
+        """按任务结果更新指标（通知式，不影响任务执行）。
+
+        - 计数：按处理器名 + 结果（``success`` / ``error`` / ``cancelled`` / ``skipped``）；
+        - 直方图：任务执行时长（信号量获取后 → 结束）与排队时长（派发 → 信号量获取）。
+        """
+        outcome = record.outcome or 'unknown'
+        handler_name = record.handler_name
+        duration_seconds = record.duration_seconds if record.duration_seconds is not None else 0.0
+        wait_seconds = max(0.0, (record.started_at - record.dispatched_at).total_seconds())
+
+        counts = self._task_total.get(handler_name)
+        if counts is None:
+            counts = {}
+            self._task_total[handler_name] = counts
+        counts[outcome] = counts.get(outcome, 0) + 1
+        self._observe(self._task_duration, handler_name, duration_seconds)
+        self._observe(self._task_wait, handler_name, wait_seconds)
+
+        if self._prom_integrated:
+            self._prom_task_counter.labels(handler=handler_name, outcome=outcome).inc()
+            self._prom_task_duration.labels(handler=handler_name).observe(duration_seconds)
+            self._prom_task_wait.labels(handler=handler_name).observe(wait_seconds)
+        if self._otel_integrated:
+            self._otel_task_counter.add(1, {'handler': handler_name, 'outcome': outcome})
+            self._otel_task_duration.record(duration_seconds, {'handler': handler_name})
+            self._otel_task_wait.record(wait_seconds, {'handler': handler_name})
 
     # ------------------------------------------------------------------
     # SDK 集成
@@ -311,6 +366,27 @@ class MetricsMiddleware(Middleware):
         )
         self._prom_tasks_gauge.set_function(lambda: self._bus.active_task_count if self._bus else 0)
 
+        self._prom_task_counter = prometheus_client.Counter(
+            'infinity_bus_task_total',
+            '处理器任务完成次数（按结果）',
+            labelnames=['handler', 'outcome'],
+            registry=registry,
+        )
+        self._prom_task_duration = prometheus_client.Histogram(
+            'infinity_bus_task_duration_seconds',
+            '处理器任务执行耗时（秒）',
+            labelnames=['handler'],
+            buckets=list(self._histogram_bounds),
+            registry=registry,
+        )
+        self._prom_task_wait = prometheus_client.Histogram(
+            'infinity_bus_task_wait_seconds',
+            '处理器任务排队耗时（秒）',
+            labelnames=['handler'],
+            buckets=list(self._histogram_bounds),
+            registry=registry,
+        )
+
         self._prom_integrated = True
         logger.info('MetricsMiddleware 已桥接到 prometheus_client (registry=%s)', registry)
 
@@ -377,6 +453,21 @@ class MetricsMiddleware(Middleware):
             callbacks=[_tasks_callback],
         )
 
+        self._otel_task_counter = meter.create_counter(
+            'infinity_bus.task_total',
+            description='处理器任务完成次数（按结果）',
+        )
+        self._otel_task_duration = meter.create_histogram(
+            'infinity_bus.task_duration',
+            description='处理器任务执行耗时（秒）',
+            unit='s',
+        )
+        self._otel_task_wait = meter.create_histogram(
+            'infinity_bus.task_wait',
+            description='处理器任务排队耗时（秒）',
+            unit='s',
+        )
+
         self._otel_integrated = True
         logger.info('MetricsMiddleware 已桥接到 opentelemetry-api (meter=%s)', meter)
 
@@ -397,10 +488,15 @@ class MetricsMiddleware(Middleware):
     def snapshot(self) -> MetricsSnapshot:
         """返回当前所有指标的只读快照。"""
         duration_snap: Dict[str, Buckets] = {name: hist.snapshot() for name, hist in self._publish_duration.items()}
+        task_duration_snap: Dict[str, Buckets] = {name: hist.snapshot() for name, hist in self._task_duration.items()}
+        task_wait_snap: Dict[str, Buckets] = {name: hist.snapshot() for name, hist in self._task_wait.items()}
         return MetricsSnapshot(
             publish_total=dict(self._publish_total),
             publish_duration_sec=duration_snap,
             publish_errors_total=self._publish_errors_total,
             queue_size=self._bus.queue_size if self._bus else 0,
             active_tasks=self._bus.active_task_count if self._bus else 0,
+            task_total={name: dict(counts) for name, counts in self._task_total.items()},
+            task_duration_sec=task_duration_snap,
+            task_wait_sec=task_wait_snap,
         )

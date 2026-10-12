@@ -15,7 +15,7 @@ registration order.
 | `RecursionGuardMiddleware` | `before_publish` | Dual-layer recursion detection | [recursion_guard.md](recursion_guard.md) |
 | `EventBlockMiddleware` | `before_publish` | Rule-based event blocking (discard) | [event_block.md](event_block.md) |
 | `EventTransformMiddleware` | `before_publish` | Event name transform / field inject / redact | [event_transform.md](event_transform.md) |
-| `MetricsMiddleware` | `before_publish` + `on_publish` | Prometheus / OTel style metrics collection | [metrics.md](metrics.md) |
+| `MetricsMiddleware` | `before_publish` + `on_publish` + `on_task_done` | Prometheus / OTel style metrics collection | [metrics.md](metrics.md) |
 | `EventForwardMiddleware` | `on_publish` | Unidirectional cross-bus event forwarding | [event_forward.md](event_forward.md) |
 | `JSONLLoggingMiddleware` | `on_publish` | JSONL file persistent logging | [logging.md](logging.md) |
 | `SQLiteLoggingMiddleware` | `on_publish` | SQLite database persistent logging | [logging.md](logging.md) |
@@ -48,7 +48,8 @@ Publish Request
 
 > **Recommended registration order**: Rate Limit → Recursion Guard → Block → Transform →
 > Metrics → Forward → Logging.
-> The metrics middleware spans both `before_publish` (timer start) and `on_publish` (timer end);
+> The metrics middleware spans `before_publish` (timer start), `on_publish` (timer end), and
+> `on_task_done` (task outcome / execution latency / queue latency);
 > placing it after Transform ensures transformed event names are correctly recorded in metrics.
 > Placing forwarding before logging in the `on_publish` phase ensures log middlewares only
 > record events from the local bus.
