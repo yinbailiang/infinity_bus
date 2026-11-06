@@ -27,12 +27,16 @@ success" out of business code into a replaceable recorder.
 class IdempotencyRecorder(Protocol):
     async def is_processed(self, consumer: str, event_id: str) -> bool: ...
     async def mark_processed(self, consumer: str, event_id: str) -> None: ...
+    async def claim(self, consumer: str, event_id: str) -> bool: ...
+    async def release(self, consumer: str, event_id: str) -> None: ...
 ```
 
 | Method | Semantics |
 | - | - |
 | `is_processed(consumer, event_id)` | Whether (consumer, event_id) was already processed |
 | `mark_processed(consumer, event_id)` | Mark as processed (repeated marks must be idempotent) |
+| `claim(consumer, event_id)` | Atomic claim: mark and return `True` if unprocessed, `False` otherwise (`INSERT OR IGNORE` + rowcount in one step) |
+| `release(consumer, event_id)` | Withdraw a claim: delete the marker so a redelivered event can be dispatched again (no-op if absent) |
 
 `consumer` distinguishes consumers: under fanout every member processes the same events
 and records its own markers, never interfering with each other.
@@ -71,6 +75,34 @@ mark_processed   not marked (left for at-least-once redelivery)
 
 ---
 
+## Dispatch-boundary claiming (claim / release)
+
+`IdempotentHandler` marks **on success**; when dedup lives at the dispatch boundary
+(check before dispatching in `before_dispatch`), use the atomic `claim`:
+
+```python
+class DedupMiddleware(Middleware):
+    def __init__(self, recorder: IdempotencyRecorder, consumer: str) -> None:
+        self._recorder = recorder
+        self._consumer = consumer
+
+    async def before_dispatch(self, event, handler_ids, next):
+        if not await self._recorder.claim(self._consumer, event.id):
+            return                      # already claimed: drop this delivery
+        await next(event, handler_ids)
+
+    async def on_dispatch_abandoned(self, event):
+        # shutdown abandoned the dispatch (some task never started):
+        # withdraw the claim so the redelivery can be dispatched again
+        await self._recorder.release(self._consumer, event.id)
+```
+
+> `claim` records **before** handling (a failure is not auto-reverted); `release` pairs
+> with the `on_dispatch_abandoned` middleware hook so that "claimed ⇔ actually handed
+> to the handlers".
+
+---
+
 ## Injected Policies
 
 | Policy | Description |
@@ -83,7 +115,11 @@ mark_processed   not marked (left for at-least-once redelivery)
 ```python
 from infinity_bus.templates.idempotency import SqliteIdempotencyRecorder
 
-recorder = SqliteIdempotencyRecorder('processed.db')  # or ':memory:'
+recorder = SqliteIdempotencyRecorder(
+    'processed.db',                     # or ':memory:'
+    retention_seconds=7 * 24 * 3600.0,  # 0 = keep forever
+    sweep_interval_seconds=600.0,       # prune check interval
+)
 await recorder.start()
 try:
     ...
@@ -94,6 +130,16 @@ finally:
 Table `processed_log(consumer, event_id, ts)` with primary key `(consumer, event_id)`;
 writes use `INSERT OR IGNORE`, so concurrent duplicate marks are made safe by the
 primary-key constraint.
+
+The connection runs `journal_mode=WAL` + `synchronous=NORMAL`: with the defaults every
+mark fsyncs (measured ~13ms per check+mark — dedup runs once per event per handler, i.e.
+an fsync on the dispatch path). WAL may lose the last few transactions on power loss;
+acceptable for a dedup table: worst case the event runs one extra time.
+
+Rows older than `retention_seconds` (default 7 days) are pruned on `start()`, then every
+`sweep_interval_seconds` on the write path; `await recorder.prune()` is available for
+manual maintenance and returns the deleted row count. Without pruning the table only
+grows (measured 50k rows/day for a single consumer).
 
 ---
 
@@ -119,6 +165,9 @@ handler = MyHandler(recorder, 'consumer-A')   # consumer distinguishes members
 
 - The dedup key is `Event.id` (uuid4 hex); duplicate publishes of the same business
   event must reuse the same id to be deduplicated.
+- The `claim` pattern records at the dispatch boundary; if an event is never fully
+  dispatched, `release` it in `on_dispatch_abandoned` — otherwise redelivery will be
+  blocked by your own claim.
 - The memory policy works only within one process; for cross-restart strong idempotency
   use the SQLite policy or natural business idempotency.
 - Marking and side effects are not atomic: in the narrow "side effect done, crash before

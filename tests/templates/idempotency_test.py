@@ -1,6 +1,7 @@
 """幂等 recorder 测试：InMemory / Sqlite 持久共享 + IdempotentHandler 注入语义。"""
 
 import asyncio
+from pathlib import Path
 from typing import Any, Optional
 
 import pytest
@@ -122,3 +123,170 @@ async def test_handler_failure_is_not_marked() -> None:
         assert not await recorder.is_processed('consumer-A', ev.id)
     finally:
         await bus.stop()
+
+
+# ============================================================================
+# Sqlite 记录器的运维属性：写放大与无限增长
+# ============================================================================
+
+
+def _rows(db_path: Path) -> list[tuple[str, str, str]]:
+    """绕过被测代码直接读库（校验落库效果）。"""
+    import sqlite3
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        return [
+            (str(a), str(b), str(c)) for a, b, c in conn.execute('SELECT consumer, event_id, ts FROM processed_log')
+        ]
+    finally:
+        conn.close()
+
+
+def _insert(db_path: Path, consumer: str, event_id: str, ts: str) -> None:
+    """按表结构手工写一行（模拟历史数据）。"""
+    import sqlite3
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            'CREATE TABLE IF NOT EXISTS processed_log ('
+            ' consumer TEXT NOT NULL, event_id TEXT NOT NULL, ts TEXT NOT NULL,'
+            ' PRIMARY KEY (consumer, event_id))'
+        )
+        conn.execute('INSERT OR IGNORE INTO processed_log VALUES (?, ?, ?)', (consumer, event_id, ts))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_sqlite_recorder_enables_wal(tmp_path: Path) -> None:
+    """连接开 WAL：默认 rollback journal 每次 mark 都要 fsync，等于在派发路径上插 fsync。"""
+    import sqlite3
+
+    db = tmp_path / 'dedupe.sqlite'
+    recorder = SqliteIdempotencyRecorder(str(db))
+    await recorder.start()
+    try:
+        conn = sqlite3.connect(str(db))
+        try:
+            mode = conn.execute('PRAGMA journal_mode').fetchone()
+        finally:
+            conn.close()
+    finally:
+        await recorder.close()
+
+    assert mode is not None
+    assert str(mode[0]).lower() == 'wal'
+
+
+@pytest.mark.asyncio
+async def test_sqlite_recorder_prunes_expired_rows_on_start(tmp_path: Path) -> None:
+    """启动时按保留期清理：这张表不清就是只增不减。"""
+    from datetime import datetime, timedelta, timezone
+
+    db = tmp_path / 'dedupe.sqlite'
+    now = datetime.now(timezone.utc)
+    _insert(db, 'c', 'ancient', (now - timedelta(days=30)).isoformat())
+    _insert(db, 'c', 'fresh', (now - timedelta(minutes=5)).isoformat())
+
+    recorder = SqliteIdempotencyRecorder(str(db), retention_seconds=7 * 24 * 3600.0)
+    await recorder.start()
+    await recorder.close()
+
+    assert [row[1] for row in _rows(db)] == ['fresh']
+
+
+@pytest.mark.asyncio
+async def test_sqlite_recorder_sweeps_while_writing(tmp_path: Path) -> None:
+    """长跑进程也要清：按巡检间隔在写路径上顺带清理。"""
+    db = tmp_path / 'dedupe.sqlite'
+    recorder = SqliteIdempotencyRecorder(str(db), retention_seconds=60.0, sweep_interval_seconds=0.0)
+    await recorder.start()
+    try:
+        _insert(db, 'c', 'ancient', '2000-01-01T00:00:00+00:00')
+        await recorder.mark_processed('c', 'fresh')
+    finally:
+        await recorder.close()
+
+    assert sorted(row[1] for row in _rows(db)) == ['fresh']
+
+
+@pytest.mark.asyncio
+async def test_sqlite_recorder_prune_is_public_and_counts(tmp_path: Path) -> None:
+    """``prune()`` 可直接调用并返回删除条数（运维手动清库用）。"""
+    from datetime import datetime, timedelta, timezone
+
+    db = tmp_path / 'dedupe.sqlite'
+    now = datetime.now(timezone.utc)
+    recorder = SqliteIdempotencyRecorder(str(db), retention_seconds=7 * 24 * 3600.0)
+    await recorder.start()
+    try:
+        # start 已经清过一次，这里再造过期数据来验证显式调用
+        _insert(db, 'c', 'old-1', (now - timedelta(days=30)).isoformat())
+        _insert(db, 'c', 'old-2', (now - timedelta(days=20)).isoformat())
+        await recorder.mark_processed('c', 'new')
+
+        assert await recorder.prune() == 2
+        assert await recorder.is_processed('c', 'new') is True
+    finally:
+        await recorder.close()
+
+
+@pytest.mark.asyncio
+async def test_sqlite_recorder_retention_zero_keeps_everything(tmp_path: Path) -> None:
+    """``retention_seconds=0`` 关掉清理（需要永久审计的场景）。"""
+    from datetime import datetime, timedelta, timezone
+
+    db = tmp_path / 'dedupe.sqlite'
+    old = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat()
+    _insert(db, 'c', 'ancient', old)
+
+    recorder = SqliteIdempotencyRecorder(str(db), retention_seconds=0)
+    await recorder.start()
+    try:
+        assert [row[1] for row in _rows(db)] == ['ancient']
+        assert await recorder.prune() == 0
+    finally:
+        await recorder.close()
+
+
+# ============================================================================
+# 原子认领（claim）
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_inmemory_claim_is_atomic() -> None:
+    """claim：首次成功，重复返回 False；与 mark_processed 共享同一去重表。"""
+    r = InMemoryIdempotencyRecorder()
+    assert await r.claim('c', 'e1') is True
+    assert await r.claim('c', 'e1') is False
+    assert await r.is_processed('c', 'e1')
+    await r.mark_processed('c', 'e2')
+    assert await r.claim('c', 'e2') is False
+
+    await r.release('c', 'e1')
+    assert await r.claim('c', 'e1') is True, '撤回认领后重投应能重新派发'
+
+
+@pytest.mark.asyncio
+async def test_sqlite_claim_is_atomic(tmp_path: Path) -> None:
+    """claim：INSERT OR IGNORE + rowcount 一步完成；重复与跨 consumer 语义正确。"""
+    db = str(tmp_path / 'idem.db')
+    r = SqliteIdempotencyRecorder(db)
+    await r.start()
+    try:
+        assert await r.claim('c', 'e1') is True
+        assert await r.claim('c', 'e1') is False
+        assert await r.is_processed('c', 'e1')
+        await r.mark_processed('c', 'e2')
+        assert await r.claim('c', 'e2') is False
+        assert await r.claim('other', 'e1') is True
+
+        await r.release('c', 'e1')
+        assert await r.is_processed('c', 'e1') is False
+        assert await r.claim('c', 'e1') is True, '撤回认领后重投应能重新派发'
+    finally:
+        await r.close()

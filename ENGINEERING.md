@@ -61,7 +61,7 @@ ignore-nested-functions = true
 
 | 指标 | 数值 |
 | - | - |
-| 公开 API docstring 覆盖 | **92.0%** |
+| 公开 API docstring 覆盖 | **92.3%** |
 | 最低阈值 | 60% |
 | 文档文件 | 58 篇 `.md` |
 
@@ -72,8 +72,8 @@ ignore-nested-functions = true
 ### 覆盖率
 
 ```text
-435 passed · 10 deselected(slow) · 0 failed · 13.5s
-总覆盖率: 94%（2440 statements / 158 missed）
+445 passed · 10 deselected(slow) · 0 failed · 13.7s
+总覆盖率: 94%（2500 statements / 158 missed）
 ```
 
 14 个模块达到 **100%** 覆盖，最低模块 83%（logging）。

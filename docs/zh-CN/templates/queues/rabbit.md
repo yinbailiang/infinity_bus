@@ -33,6 +33,7 @@ q = await RabbitFanoutQueue.create(
     codec=None,                # EventCodec；缺省用 EventCodec(registry)
     registry=None,             # 事件注册表（负载重建依据）
     strategy='restart',        # 'restart' | 'offline'
+    drain_timeout=15.0,        # join 内部排空上限（秒）
 )
 ```
 
@@ -42,7 +43,20 @@ q = await RabbitFanoutQueue.create(
 | `url` | `str` | AMQP URL，默认 `RABBITMQ_URL` 或 `amqp://guest:guest@127.0.0.1:5672/` |
 | `codec` | `EventCodec \| None` | 编解码器；缺省用 `EventCodec(registry)` |
 | `registry` | `EventRegistry \| None` | 事件注册表 |
-| `strategy` | `'restart' \| 'offline'` | 成员离开策略 |
+| `strategy` | `'restart' \| 'offline'` | 成员离开策略（运行期可用 `set_strategy()` 切换） |
+| `drain_timeout` | `float` | `join` 内部排空上限（秒），应小于停机预算 |
+
+---
+
+## 运行期切换策略
+
+```python
+q.strategy                 # 'restart' | 'offline'
+q.set_strategy('offline')  # join 只在停机那一刻读它，运行期切换是安全的
+```
+
+「这次是重启还是下线」通常由决策方（如进程管理器）在停机前才确定，而队列是启动时
+建好的；用 `set_strategy()`，不要改私有字段。
 
 ---
 
