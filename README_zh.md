@@ -54,7 +54,7 @@
 | 事件返回值 | ⚠️ 通过 `request` 模板 | ✅ 内置 `event.event_result()` | ❌ | ❌ |
 | 事件转发 | ⚠️ EventForwardMiddleware | ✅ 内置 `event.forward_to()` | ❌ | ❌ |
 | 依赖数量 | 1 核心（pydantic）+ 5 可选 | 6（anyio, aiofiles...） | 0 | 0 |
-| 优雅停机 | ✅ 排空队列 + 等待活跃任务 | ✅ wait_until_idle + 队列关闭 | ⚠️ `wait_for_complete` + `cancel` | N/A（同步） |
+| 优雅停机 | ✅ 等事件全部派发 + 等待活跃任务 | ✅ wait_until_idle + 队列关闭 | ⚠️ `wait_for_complete` + `cancel` | N/A（同步） |
 | 超时保护 | ✅ 每 handler 独立超时 | ✅ event_result.timeout | ❌ | N/A |
 | 错误隔离 | ✅ TaskErrorEvent 统一上报 | ✅ 错误记录不中断总线 | ❌ | N/A |
 | 事件分发 FIFO | ✅ asyncio.Queue 保证入队顺序 | ✅ 全局锁保证 | ✅ 按注册顺序调用 | N/A |
@@ -145,6 +145,14 @@ uv sync --extra dev
 | `start()` 原样重抛原始启动异常 | `start()` 抛出 `BusStartFailed`（回滚完整）或 `BusStartRollbackError`（回滚不完整）；catch `BusError` 可两者兼收 |
 
 v6 新增（非破坏性）：中间件任务管道钩子（`before_dispatch` / `on_task_start` / `on_task_done`）、`MetricsMiddleware` 任务状态指标、`ShutdownConfig.task_reclaim_delay`。
+
+**v6.1：ack 表示「已派发」，不表示「已处理成功」** —— 一条事件的所有处理器任务都**开始执行**后，
+通过一个共享的启动闸门（fence）只 ack 一次。处理器失败、超时或被停机取消都不再影响 ack：
+正常的运维动作（停机、下游变慢）不会演变成重投风暴。失败仍由 `TaskErrorEvent` 上报，
+重试策略留给使用方（幂等模板 / 中间件 / 应用层补偿）。`EventQueue.task_done(event)` 必须携带
+事件身份，并发启动时才能 ack 正确的消息（不提供按取出顺序结清的兼容路径）。
+停机时未完整派发的事件会通过 `task_abandoned(event)` 通知队列：进程内队列结清计数，持久队列
+保持未确认（等 broker 重投）。新增可观测属性 `EventBus.pending_ack_count`（尚未确认的事件数）。
 
 ## 🚀 快速开始
 

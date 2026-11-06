@@ -2,7 +2,7 @@ import asyncio
 import logging
 import types
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Set, Type, Union
+from typing import Any, Callable, Dict, Optional, Set, Type, Union
 
 from pydantic import BaseModel, Field
 
@@ -99,14 +99,49 @@ class TaskErrorEvent(EventDeclaration):
 class ShutdownConfig(BaseModel):
     """总线停机配置"""
 
-    queue_timeout_min: float = Field(default=1.0, description='队列排空最小等待时间（秒）')
-    queue_timeout_max: float = Field(default=15.0, description='队列排空最大等待时间（秒）')
-    tasks_timeout: float = Field(default=15.0, description='活跃任务完成等待时间（秒）')
+    queue_timeout_min: float = Field(default=1.0, description='等待事件全部派发（处理器任务全部启动）的最短时间（秒）')
+    queue_timeout_max: float = Field(default=15.0, description='等待事件全部派发（处理器任务全部启动）的最长时间（秒）')
+    tasks_timeout: float = Field(default=15.0, description='停机时等待活跃处理器任务收尾的时间（秒）')
     task_reclaim_delay: float = Field(
         default=0.0,
         description='任务回收前等待完成回调（含任务异常日志）落定的时长（秒）；0 表示仅让出一次事件循环',
     )
-    avg_wait_time: float = Field(default=0.05, description='每个事件平均处理时间估算（秒）')
+    avg_wait_time: float = Field(default=0.05, description='单事件处理耗时估算（秒），用于按积压量推导派发等待超时')
+
+
+class _DispatchFence:
+    """一批处理器任务的启动闸门：全部开始执行后 ack 一次。
+
+    每个任务在获得并发信号量（真正开始执行）时 ``arrive``；最后一个到达者触发
+    ``on_open``。闸门**不等待**、不观察成败——它只回答「这条事件是否已完整交给
+    执行者」，因此不会入侵任务自身的生命周期。
+
+    未启动的任务（停机时仍在信号量队列中被取消）不会到达，闸门保持关闭：事件
+    因此不被 ack，持久队列会在通道关闭时重投——这正是「至少派发一次」的边界。
+    """
+
+    __slots__ = ('event', '_remaining', '_loop', '_on_open')
+
+    def __init__(self, event: Event, parties: int, on_open: Callable[['_DispatchFence'], None]) -> None:
+        self.event = event
+        self._remaining = parties
+        self._loop = asyncio.get_running_loop()
+        self._on_open = on_open
+
+    def arrive(self) -> None:
+        """标记一个处理器任务已获得执行权；最后一个到达时异步触发 ack。"""
+        if self._remaining <= 0:  # 防御重复到达：ack 只触发一次
+            return
+        self._remaining -= 1
+        if self._remaining == 0:
+            # 不在处理器任务栈上执行 ack：避免 ack 异常污染任务结果
+            self._loop.call_soon(self._open)
+
+    def _open(self) -> None:
+        try:
+            self._on_open(self)
+        except Exception:
+            logger.exception('Dispatch fence failed to acknowledge event %s', self.event.id)
 
 
 class EventBus:
@@ -173,6 +208,10 @@ class EventBus:
 
         self._handler_semaphore = asyncio.Semaphore(max_handler_semaphore)
         self._active_tasks: Set[asyncio.Task[Any]] = set()
+        # 尚未打开的启动闸门：事件已 get 但还有处理器任务没开始执行
+        self._pending_fences: Set[_DispatchFence] = set()
+        # 分发循环串行执行：标记本次事件是否已进入 _core_dispatch（异常路径用）
+        self._claimed_by_core: bool = False
 
         self._shutdown: ShutdownConfig = shutdown
 
@@ -329,6 +368,7 @@ class EventBus:
             self._enable_publish.clear()
             self._running.clear()
             await self._wait_all_tasks_done()
+            self._clear_fences()
         except Exception:
             logger.exception('Failed to roll back dispatch during start')
         handler_failures: list[tuple[str, Exception]] = []
@@ -358,7 +398,7 @@ class EventBus:
                     self._shutdown.queue_timeout_min,
                     min(self._shutdown.queue_timeout_max, self._queue.qsize() * self._shutdown.avg_wait_time),
                 )
-                await asyncio.wait_for(self._queue.join(), timeout=timeout)  # 等待队列处理完毕，避免丢失事件
+                await asyncio.wait_for(self._queue.join(), timeout=timeout)  # 等事件全部派发，避免未确认消息被重投
             except asyncio.TimeoutError:
                 logger.warning('Timeout while waiting for event queue to drain during shutdown')
 
@@ -370,6 +410,7 @@ class EventBus:
                     pass
 
             await self._wait_all_tasks_done()  # 等待所有处理器任务完成
+            self._clear_fences()  # 未完整派发的事件：内存队列结清计数，持久队列等重投
 
             self._running.clear()
             failures = await self._handlers.deactivate()
@@ -412,6 +453,7 @@ class EventBus:
         bus: 'EventBus',
         event: Event,
         dispatched_at: datetime,
+        fence: Optional[_DispatchFence] = None,
     ) -> None:
         """事件处理器包装器。
 
@@ -419,10 +461,15 @@ class EventBus:
         任务生命周期钩子在此触达：获取并发信号量后触发 ``on_task_start``；
         任务结束（成功 / 异常 / 超时 / 取消 / 停机跳过）时在 ``finally``
         路径触发 ``on_task_done``（与 ``on_task_start`` 严格配对）。
+
+        ``fence`` 是本次派发的启动闸门：获得信号量（真正开始执行）时到达，
+        全部到达才 ack —— 与任务成败无关（见 :class:`_DispatchFence`）。
         """
         record: Optional[TaskRecord] = None
         try:
             async with self._handler_semaphore:  # 控制并发处理器数量，避免过载
+                if fence is not None:
+                    fence.arrive()  # 获得执行权即视为派发成功，与任务成败无关
                 record = TaskRecord(
                     handler_id=handler_id,
                     handler_name=handler.__class__.__name__,
@@ -482,33 +529,68 @@ class EventBus:
         """``before_dispatch`` 链末端：按最终处理器 id 列表逐个创建任务并登记。
 
         本次派发的所有任务共享同一 ``dispatched_at``（分发时刻），供任务记录
-        推导信号量排队时长。
+        推导信号量排队时长；同时创建一个**启动闸门**——所有任务都获得执行权时
+        才 ``task_done``（见 :class:`_DispatchFence`）。任务成败不参与 ack 判定：
+        总线只保证事件被派发，业务结果由 ``TaskErrorEvent`` 与使用方策略负责。
         """
+        self._claimed_by_core = True
         dispatched_at = datetime.now(timezone.utc)
+        targets: list[tuple[str, EventHandler]] = []
         for handler_id in handler_ids:
             handler = self._handlers.get(handler_id)
             if handler is not None:
-                self._register_task(
-                    asyncio.create_task(self._handler_wrapper(handler, handler_id, self, event, dispatched_at))
-                )
+                targets.append((handler_id, handler))
+        if not targets:
+            self._acknowledge(event)  # 没人接手：当场确认，避免队列被坏事件卡住
+            return
+        fence = _DispatchFence(event, len(targets), self._open_fence)
+        self._pending_fences.add(fence)
+        for handler_id, handler in targets:
+            self._register_task(
+                asyncio.create_task(self._handler_wrapper(handler, handler_id, self, event, dispatched_at, fence))
+            )
 
     async def _dispatch_loop(self) -> None:
-        """事件分发主循环"""
+        """事件分发主循环。
+
+        ack 由 :class:`_DispatchFence` 在「该事件的所有处理器任务都开始执行」时
+        触发，不在这里无条件 ``task_done``；只有没人接手的事件（无处理器 /
+        被中间件短路 / 派发链在进入核心前失败）才当场确认。
+        """
         await self._running.wait()  # 等待事件总线启动
         while self._running.is_set():
-            event: Optional[Event] = None
             try:
                 event = await self._queue.get()
-                handler_ids = self._router.match(event.name)
-                try:
-                    await self._mw_chain.build_dispatch(self._core_dispatch)(event, handler_ids)
-                except Exception:
-                    logger.exception('before_dispatch chain failed (event=%s); event dropped', event.name)
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 logger.exception('Unexpected error in dispatch loop')
-            finally:
-                if event:
-                    self._queue.task_done()
+                await asyncio.sleep(0)  # 别在持续失败时空转
+                continue
+            try:
+                await self._dispatch_event(event)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception('Unexpected error dispatching event %s', event.name)
+                if not self._claimed_by_core:
+                    self._acknowledge(event)
+
+    async def _dispatch_event(self, event: Event) -> None:
+        """派发单条事件；进入核心前的失败当场确认，进入后由闸门负责 ack。"""
+        self._claimed_by_core = False
+        try:
+            handler_ids = self._router.match(event.name)
+        except Exception:
+            logger.exception('Router match failed (event=%s); event dropped', event.name)
+            self._acknowledge(event)
+            return
+        try:
+            await self._mw_chain.build_dispatch(self._core_dispatch)(event, handler_ids)
+        except Exception:
+            logger.exception('before_dispatch chain failed (event=%s); event dropped', event.name)
+            if not self._claimed_by_core:
+                self._acknowledge(event)
 
     def _register_task(self, task: asyncio.Task[Any]) -> None:
         self._active_tasks.add(task)
@@ -529,6 +611,29 @@ class EventBus:
             logger.warning(f'Task {task.get_name()} callback triggered in invalid state')
         except Exception:
             logger.exception(f'Handler task failed: {task.get_name()}')
+
+    def _open_fence(self, fence: _DispatchFence) -> None:
+        """闸门全部到达：移出待确认集合并 ack 该事件。"""
+        self._pending_fences.discard(fence)
+        self._acknowledge(fence.event)
+
+    def _acknowledge(self, event: Event) -> None:
+        """向队列确认「这条事件已派发完成」，携带事件身份以精确定位消息。"""
+        self._queue.task_done(event)
+
+    def _clear_fences(self) -> None:
+        """丢弃未打开的闸门（停机收尾）。
+
+        未打开 = 仍有处理器任务没开始执行 = 事件没有完整派发。逐个通知队列停止等待
+        该事件：进程内队列结清计数（无重投能力），持久队列保持未 ack（由 broker
+        在通道关闭时重投）。
+        """
+        for fence in self._pending_fences:
+            try:
+                self._queue.task_abandoned(fence.event)
+            except Exception:
+                logger.exception('Failed to abandon event %s during shutdown', fence.event.id)
+        self._pending_fences.clear()
 
     async def _wait_all_tasks_done(self) -> None:
         """等待所有未完成的任务完成，适用于事件总线停止时调用。
@@ -581,6 +686,11 @@ class EventBus:
     def active_task_count(self) -> int:
         """当前活跃的处理器任务数。"""
         return len(self._active_tasks)
+
+    @property
+    def pending_ack_count(self) -> int:
+        """尚未确认（还有处理器任务未开始执行）的事件数。"""
+        return len(self._pending_fences)
 
     @property
     def queue_size(self) -> int:

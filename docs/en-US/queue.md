@@ -22,18 +22,20 @@ persistent, priority, or cross-process semantics are entirely up to the injected
 class EventQueue(ABC):
     async def put(self, event: Event) -> None   # enqueue; blocks when full (backpressure)
     async def get(self) -> Event                # pop head; blocks when empty
-    def task_done(self) -> None                 # mark one event as processed
+    def task_done(self, event: Event) -> None   # mark one event as dispatched
+    def task_abandoned(self, event: Event) -> None  # not fully dispatched: stop waiting
     def qsize(self) -> int                      # current number of pending events
-    async def join(self) -> None                # wait until the queue is drained
+    async def join(self) -> None                # wait until every event is dispatched
 ```
 
 | Method | Description |
 | - | - |
 | `put(event)` | Enqueues on the publishing side. Blocks until a slot frees when full — backpressure. |
 | `get()` | Dequeues on the dispatch side. Blocks until an event arrives when empty. |
-| `task_done()` | Called after each event fetched by `get()` is processed; used by `join()` to detect drain. |
-| `qsize()` | Backlog depth; used for observability and drain-timeout estimation on shutdown. |
-| `join()` | Blocks until every enqueued event has been fetched and `task_done`-ed (key to no-loss graceful shutdown). |
+| `task_done(event)` | Called once **after all handler tasks of that event have started**; used by `join()` to detect drain. `event` lets cross-process implementations locate the exact message (concurrent starts may differ from fetch order). |
+| `task_abandoned(event)` | Called on shutdown when an event was **not fully dispatched** (some handler tasks never started): tells the queue to stop waiting. The default implementation equals `task_done(event)` (in-process queues release the count); redelivering implementations should override it to drop local tracking **without acking**, so the broker redelivers when the channel closes. |
+| `qsize()` | Backlog depth; used for observability and dispatch-wait timeout estimation on shutdown. |
+| `join()` | Blocks until every enqueued event has been fetched and `task_done(event)`-ed (the event has been fully dispatched; key to no-loss graceful shutdown). |
 
 Implementers only need to satisfy this minimal protocol to be usable by the bus; capacity
 policy, storage medium, and queue semantics are the implementation's own responsibility.
@@ -121,7 +123,7 @@ class PriorityEventQueue(EventQueue):
 
     async def put(self, event: Event) -> None: ...
     async def get(self) -> Event: ...
-    def task_done(self) -> None: ...
+    def task_done(self, event: Event) -> None: ...
     def qsize(self) -> int: ...
     async def join(self) -> None: ...
 
@@ -135,10 +137,15 @@ bus = EventBus(reg, hreg, queue=PriorityEventQueue())
 1. **Construction**: `EventBus` stores the injected `EventQueue` as its dispatch queue.
 2. **Publish**: `_core_publish` calls `await queue.put(event)`; publishers block when the
    queue is full (backpressure).
-3. **Dispatch**: the loop does `event = await queue.get()` → match handlers →
-   `queue.task_done()`.
+3. **Dispatch**: the loop does `event = await queue.get()` → match handlers → create
+   tasks and attach a **start fence**; once every handler task of that event has started,
+   the fence calls `queue.task_done(event)` exactly once. Handler failure or cancellation
+   does not affect the ack — the bus only promises dispatch; business outcomes belong to
+   `TaskErrorEvent` and the consumer's own policy.
 4. **Shutdown**: `stop()` estimates a dynamic timeout from `queue.qsize()` and awaits
-   `queue.join()` to drain the queue without losing events.
+   `queue.join()` until every queued event has been dispatched (all handler tasks
+   started). Tasks that never start are cancelled; their events stay unacknowledged and
+   are redelivered by a persistent queue when the channel closes.
 
 ---
 
@@ -147,7 +154,13 @@ bus = EventBus(reg, hreg, queue=PriorityEventQueue())
 - The `EventQueue` protocol is **intentionally minimal** — only the 5 methods the bus
   needs. Non-bus helpers (`empty`/`full`/`put_nowait`) stay out of the abstraction;
   implementations may add them freely.
-- Custom implementations must honor the `task_done`/`join` accounting semantics (exactly
-  one `task_done` per `get`), otherwise shutdown drain may block forever.
+- Custom implementations must honor the `task_done(event)` / `task_abandoned(event)` /
+  `join` accounting semantics (exactly one settlement per `get`), otherwise shutdown drain
+  may block forever. `task_done(event)` is the only ack protocol: with concurrent starts the
+  order differs from fetch order, so implementations must locate the message by `event.id`;
+  an implementation that does not accept the event identity does not satisfy the contract.
+- On shutdown, events that were never fully dispatched are reported through
+  `task_abandoned(event)`: the default releases the `join` count (no redelivery), while
+  persistent implementations keep them unacked for broker redelivery.
 - To get capacity control equivalent to the old `max_queue_size`, inject
   `InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=N))`.

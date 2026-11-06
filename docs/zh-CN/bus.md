@@ -42,6 +42,8 @@ class EventBus:
     @property
     def active_task_count(self) -> int
     @property
+    def pending_ack_count(self) -> int
+    @property
     def queue_size(self) -> int
 ```
 
@@ -64,7 +66,7 @@ class EventBus:
 | 方法 | 说明 |
 | - | - |
 | `start()` | 启动事件总线：先初始化中间件链（各中间件 `on_setup`），再激活处理器注册表（`registry.activate(bus)`——各处理器把订阅束登记进 `bus.router`），最后启动调度循环并开放发布——**顺序与 `stop()` 的清理顺序互为镜像**，处理器在激活阶段发布的消息也经过完整就绪的中间件管道。**失败安全可重试**：任一环节失败即整体回滚（撤销调度、下线处理器、回滚中间件）到干净的未启动态。重复调用安全；启动失败统一抛出 `BusError` 子类——回滚完整抛 `BusStartFailed`（携带 `original_error` 与 `__cause__` 链），回滚不完整抛 `BusStartRollbackError`（聚合原始异常与处理器 / 中间件失败清单）。 |
-| `stop()` | 优雅停止：发布 `__shutdown__` → 拒绝新发布 → 等待队列排空 → 取消调度 → 等待活跃任务完成 → 下线处理器注册表（`registry.deactivate()`）；下线失败会记录并汇总告警。重复调用安全。 |
+| `stop()` | 优雅停止：发布 `__shutdown__` → 拒绝新发布 → 等待队列事件全部派发（处理器任务全部启动）→ 取消调度 → 等待活跃任务完成 → 下线处理器注册表（`registry.deactivate()`）；下线失败会记录并汇总告警。重复调用安全。仍未启动的任务会被取消；其事件通过 `task_abandoned(event)` 结清本地等待（进程内队列释放计数，持久队列保持未 ack 由 broker 重投）。 |
 | `async with EventBus(...) as bus:` | 上下文管理器，自动启停。退出时 `stop()` 异常不会掩盖上下文体异常。 |
 
 ### 可观测性
@@ -74,6 +76,7 @@ class EventBus:
 | `is_running` | `bool` | 总线是否在运行。详见 [is_running](#is_running)。 |
 | `is_publishing_enabled` | `bool` | 是否允许发布新事件。详见 [is_publishing_enabled](#is_publishing_enabled)。 |
 | `active_task_count` | `int` | 当前活跃的处理器任务数。 |
+| `pending_ack_count` | `int` | 尚未确认的事件数（还有处理器任务未开始执行）。 |
 | `queue_size` | `int` | 事件队列中待处理的事件数。 |
 
 #### `is_running`
@@ -237,13 +240,13 @@ class ShutdownConfig(BaseModel):
 
 | 字段 | 类型 | 默认值 | 说明 |
 | - | - | - | - |
-| `queue_timeout_min` | `float` | `1.0` | 队列排空最小等待时间（秒）。 |
-| `queue_timeout_max` | `float` | `15.0` | 队列排空最大等待时间（秒）。 |
-| `tasks_timeout` | `float` | `15.0` | 活跃处理器任务完成等待时间（秒）。 |
+| `queue_timeout_min` | `float` | `1.0` | 等待事件全部派发（处理器任务全部启动）的最短时间（秒）。 |
+| `queue_timeout_max` | `float` | `15.0` | 等待事件全部派发（处理器任务全部启动）的最长时间（秒）。 |
+| `tasks_timeout` | `float` | `15.0` | 停机时等待活跃处理器任务收尾的时间（秒）。 |
 | `task_reclaim_delay` | `float` | `0.0` | 任务回收前等待完成回调（含任务异常日志）落定的时长（秒）；`0` 表示仅让出一次事件循环。 |
-| `avg_wait_time` | `float` | `0.05` | 每个事件平均处理时间估算（秒），用于动态计算队列排空超时。 |
+| `avg_wait_time` | `float` | `0.05` | 单事件处理耗时估算（秒），用于按积压量推导派发等待超时。 |
 
-实际队列排空超时 = `max(queue_timeout_min, min(queue_timeout_max, queue_size × avg_wait_time))`。
+实际派发等待超时 = `max(queue_timeout_min, min(queue_timeout_max, queue_size × avg_wait_time))`。
 
 ---
 

@@ -75,7 +75,7 @@ q = await RabbitFanoutQueue.create(
 | - | - |
 | `put(event)` | `exchange.publish` (fanout to all bound queues, incl. self) |
 | `get()` | From the local inbound (fed by the subscription callback; message un-acked) |
-| `task_done()` | `basic_ack` per message (refills the prefetch quota) |
+| `task_done(event)` | Locates the message by `event.id` and `basic_ack`s it (refills the prefetch quota); leaves it unacked if not found |
 | `join()` | Detach input and drain per strategy (see two strategies) |
 | `resume()` | restart: re-`consume` / offline: re-`bind` + `consume` |
 | `qsize()` | Local inbound + un-acked |
