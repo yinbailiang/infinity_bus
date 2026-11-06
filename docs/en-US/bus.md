@@ -44,6 +44,8 @@ class EventBus:
     @property
     def active_task_count(self) -> int
     @property
+    def pending_ack_count(self) -> int
+    @property
     def queue_size(self) -> int
 ```
 
@@ -70,7 +72,7 @@ other settings live on the queue itself — the bus never knows them; inject
 | Method | Description |
 | - | - |
 | `start()` | Starts the event bus: first initializes the middleware chain (each middleware's `on_setup`), then activates the handler registry (`registry.activate(bus)` — each handler's subscription bundle registers into `bus.router`), and finally starts the dispatch loop and enables publishing — **the order mirrors `stop()`'s cleanup**, so messages published during handler activation go through a fully-ready middleware pipeline. **Failure-safe & retryable**: any failure rolls back (cancel dispatch, deactivate handlers, tear down middleware) to a clean not-started state. Idempotent; start failures always raise a `BusError` subclass — `BusStartFailed` when the rollback is complete (carries `original_error` and the `__cause__` chain), or `BusStartRollbackError` when the rollback itself is incomplete (aggregates the original exception with the handler / middleware failure lists). |
-| `stop()` | Graceful shutdown: publish `__shutdown__` → reject new publishes → drain queue → cancel dispatch → wait for active tasks → deactivate the handler registry (`registry.deactivate()`); handler deactivation failures are logged and summarized. Idempotent. |
+| `stop()` | Graceful shutdown: publish `__shutdown__` → reject new publishes → wait until every queued event has been dispatched (all handler tasks started) → cancel dispatch → wait for active tasks → deactivate the handler registry (`registry.deactivate()`); handler deactivation failures are logged and summarized. Tasks that never start are cancelled and their events stay unacknowledged (redelivered by a persistent queue). Idempotent. |
 | `async with EventBus(...) as bus:` | Context manager, auto start/stop. `stop()` errors on exit won't mask body exceptions. |
 
 ### Observability
@@ -80,6 +82,7 @@ other settings live on the queue itself — the bus never knows them; inject
 | `is_running` | `bool` | Whether the bus is running. See [is_running](#is_running). |
 | `is_publishing_enabled` | `bool` | Whether new events are accepted. See [is_publishing_enabled](#is_publishing_enabled). |
 | `active_task_count` | `int` | Number of currently active handler tasks. |
+| `pending_ack_count` | `int` | Events not yet acknowledged (handler tasks still waiting to start). |
 | `queue_size` | `int` | Number of events currently queued for dispatch. |
 
 #### `is_running`
@@ -244,13 +247,13 @@ class ShutdownConfig(BaseModel):
 
 | Field | Type | Default | Description |
 | - | - | - | - |
-| `queue_timeout_min` | `float` | `1.0` | Minimum queue drain wait (seconds). |
-| `queue_timeout_max` | `float` | `15.0` | Maximum queue drain wait (seconds). |
-| `tasks_timeout` | `float` | `15.0` | Active handler task completion wait (seconds). |
+| `queue_timeout_min` | `float` | `1.0` | Minimum wait for every event to be dispatched (all handler tasks started), in seconds. |
+| `queue_timeout_max` | `float` | `15.0` | Maximum wait for every event to be dispatched (all handler tasks started), in seconds. |
+| `tasks_timeout` | `float` | `15.0` | Wait for active handler tasks to settle during shutdown, in seconds. |
 | `task_reclaim_delay` | `float` | `0.0` | Extra settle time before task reclamation, letting completion callbacks (and task-error logs) run first (seconds); `0` yields the event loop once. |
-| `avg_wait_time` | `float` | `0.05` | Estimated per-event processing time (seconds), used for dynamic queue drain timeout calculation. |
+| `avg_wait_time` | `float` | `0.05` | Estimated per-event processing time (seconds), used to derive the dispatch-wait timeout from the backlog. |
 
-Actual queue drain timeout = `max(queue_timeout_min, min(queue_timeout_max, queue_size × avg_wait_time))`.
+Actual dispatch-wait timeout = `max(queue_timeout_min, min(queue_timeout_max, queue_size × avg_wait_time))`.
 
 ---
 

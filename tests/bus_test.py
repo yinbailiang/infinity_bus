@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable, List, Optional
 
 import pytest
 from conftest import (
+    BaseTestHandler,
     BlockingHandler,
     ConcurrentTrackingHandler,
     CountingHandler,
@@ -27,6 +28,7 @@ from infinity_bus import (
     EventBus,
     EventHandler,
     EventHandlerRegistry,
+    EventQueue,
     EventRegistry,
     InMemoryEventQueue,
     InMemoryEventQueueConfig,
@@ -1405,3 +1407,286 @@ async def test_start_error_aggregates_middleware_teardown_failure(
     await wait_for_condition(lambda: good.count == 1)
     await bus.stop()
     assert good.count == 1
+
+
+# ============================================================================
+# ack 时机：派发保证（处理器任务全部开始执行才 task_done）
+#
+# 总线只承诺「事件被完整交给执行者」：该事件派生的所有处理器任务都获得执行权
+# 后 ack 一次。任务成败不参与 ack 判定——处理器失败由 TaskErrorEvent 上报，
+# 是否重试由使用方策略（幂等模板 / 中间件 / 应用层补偿）决定。
+# ============================================================================
+
+
+class _AckRecordingQueue(EventQueue):
+    """记录 ack 的自定义队列（新签名 ``task_done(event)``）。
+
+    总线自己也会发内部事件（``__shutdown__`` / ``__task_error__``），它们没有
+    订阅者、会立刻被结清；断言时按事件名过滤，只数被测的那条。
+    """
+
+    def __init__(self) -> None:
+        self._inner = InMemoryEventQueue()
+        self.published: List[Event] = []
+        self.acked: List[Event] = []
+
+    @property
+    def unfinished(self) -> int:
+        return int(self._inner._queue._unfinished_tasks)  # type: ignore[attr-defined]
+
+    def acked_ids(self, name: str) -> List[str]:
+        """某个事件名下已 ack 的事件 id（顺序即 ack 顺序）。"""
+        return [event.id for event in self.acked if event.name == name]
+
+    async def put(self, event: Event) -> None:
+        self.published.append(event)
+        await self._inner.put(event)
+
+    async def get(self) -> Event:
+        return await self._inner.get()
+
+    def task_done(self, event: Event) -> None:
+        self.acked.append(event)
+        self._inner.task_done(event)
+
+    def qsize(self) -> int:
+        return self._inner.qsize()
+
+    async def join(self) -> None:
+        await self._inner.join()
+
+
+class _SleepingHandler(BaseTestHandler):
+    """睡固定时长后成功返回的处理器。"""
+
+    def __init__(self, delay: float = 0.2) -> None:
+        super().__init__(['test.slow'], handle_timeout=5.0)
+        self.delay = delay
+
+    async def _do_handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+        await asyncio.sleep(self.delay)
+
+
+class _GatedHandler(BaseTestHandler):
+    """启动后阻塞在闸门上、直到测试显式放行的处理器。"""
+
+    def __init__(self, gate: asyncio.Event) -> None:
+        super().__init__(['test.slow'], handle_timeout=5.0)
+        self.gate = gate
+
+    async def _do_handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+        await self.gate.wait()
+
+
+class _FailingHandler(BaseTestHandler):
+    """必抛异常的处理器。"""
+
+    def __init__(self) -> None:
+        super().__init__(['test.slow'], handle_timeout=5.0)
+
+    async def _do_handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+        raise RuntimeError('handler boom')
+
+
+class _PostProcessingMiddleware(Middleware):
+    """在 ``next`` 之后继续 await 的中间件（合法的后处理）。"""
+
+    async def before_publish(
+        self,
+        event_registry: EventRegistry,
+        name: str,
+        source: str,
+        data: dict[str, Any] | BaseModel | None,
+        old_event: Event | None,
+        next: BeforePublishNext,
+    ) -> None:
+        await next(event_registry, name, source, data, old_event)
+
+    async def on_publish(self, event: Event, next: OnPublishNext) -> None:
+        await next(event)
+
+    async def before_dispatch(self, event: Event, handler_ids: list[str], next: DispatchNext) -> None:
+        await next(event, handler_ids)
+        await asyncio.sleep(0.05)
+
+
+@pytest.mark.asyncio
+async def test_event_acked_when_handler_starts_not_when_completes(
+    event_bus_factory: Callable[..., EventBus], handler_registry: EventHandlerRegistry
+) -> None:
+    """处理器获得执行权就 ack：ack 是「已派发」的承诺，不是「已处理成功」。"""
+    queue = _AckRecordingQueue()
+    bus = event_bus_factory(queue=queue)
+    handler = _SleepingHandler(delay=0.2)
+    await bus.start()
+    try:
+        await handler_registry.register(handler)
+        await bus.proxy('test_pub').publish('test.slow')
+
+        await handler.wait_started()
+        await wait_for_condition(lambda: queue.acked_ids('test.slow') != [])
+        assert queue.acked_ids('test.slow') == [queue.published[0].id], 'ack 必须携带事件身份'
+        assert not handler._completed.is_set(), '处理器还在跑，但派发已经完成'
+        assert bus.pending_ack_count == 0
+
+        await handler.wait_completed()
+    finally:
+        await bus.stop()
+
+
+@pytest.mark.asyncio
+async def test_event_acked_only_after_all_handlers_started(
+    event_bus_factory: Callable[..., EventBus], handler_registry: EventHandlerRegistry
+) -> None:
+    """一条事件多个处理器：全部获得执行权后才 ack，且只 ack 一次。"""
+    queue = _AckRecordingQueue()
+    bus = event_bus_factory(queue=queue, max_handler_semaphore=1)
+    gate = asyncio.Event()
+    first = _GatedHandler(gate)
+    second = _SleepingHandler(delay=0.0)
+    await bus.start()
+    try:
+        await handler_registry.register(first)
+        await handler_registry.register(second)
+        await bus.proxy('test_pub').publish('test.slow')
+
+        await first.wait_started()
+        await asyncio.sleep(0.05)
+        assert queue.acked_ids('test.slow') == [], '还有任务在信号量排队，不能 ack'
+        assert bus.pending_ack_count == 1
+
+        gate.set()
+        await second.wait_started()
+        await wait_for_condition(lambda: queue.acked_ids('test.slow') != [])
+        assert len(queue.acked_ids('test.slow')) == 1, '一条事件只该 ack 一次（不是每个处理器一次）'
+        assert bus.pending_ack_count == 0
+    finally:
+        gate.set()
+        await bus.stop()
+
+
+@pytest.mark.asyncio
+async def test_event_without_handler_is_acked_immediately(
+    event_bus_factory: Callable[..., EventBus],
+) -> None:
+    """没有处理器接手的事件也要当场结清，否则队列会被它永久卡住。"""
+    queue = _AckRecordingQueue()
+    bus = event_bus_factory(queue=queue)
+    await bus.start()
+    try:
+        await bus.proxy('test_pub').publish('user.login')  # 无订阅者
+        await wait_for_condition(lambda: queue.acked_ids('user.login') != [])
+        assert queue.acked_ids('user.login') == [queue.published[0].id]
+        assert queue.unfinished == 0
+    finally:
+        await bus.stop()
+
+
+@pytest.mark.asyncio
+async def test_failed_handler_does_not_block_ack(
+    event_bus_factory: Callable[..., EventBus], handler_registry: EventHandlerRegistry
+) -> None:
+    """处理器失败不阻止 ack：总线只承诺派发，失败由 TaskErrorEvent 与使用方策略处理。"""
+    queue = _AckRecordingQueue()
+    bus = event_bus_factory(queue=queue)
+    handler = _FailingHandler()
+    await bus.start()
+    try:
+        await handler_registry.register(handler)
+        await bus.proxy('test_pub').publish('test.slow')
+        await wait_for_condition(lambda: handler.error is not None)
+        await wait_for_condition(lambda: queue.unfinished == 0)
+
+        assert queue.acked_ids('test.slow') == [queue.published[0].id]
+        assert bus.pending_ack_count == 0
+    finally:
+        await bus.stop()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_after_start_keeps_ack(
+    event_bus_factory: Callable[..., EventBus], handler_registry: EventHandlerRegistry
+) -> None:
+    """停机取消已启动的处理器不影响 ack：运维动作不是业务失败。"""
+    queue = _AckRecordingQueue()
+    bus = event_bus_factory(queue=queue)
+    bus._shutdown = ShutdownConfig(tasks_timeout=0.05)
+    handler = _SleepingHandler(delay=5.0)
+    await bus.start()
+    try:
+        await handler_registry.register(handler)
+        await bus.proxy('test_pub').publish('test.slow')
+        await handler.wait_started()
+        await wait_for_condition(lambda: queue.acked_ids('test.slow') != [])
+    finally:
+        await bus.stop()
+
+    assert queue.acked_ids('test.slow') == [queue.published[0].id]
+    assert bus.pending_ack_count == 0
+
+
+@pytest.mark.asyncio
+async def test_handler_never_started_leaves_event_unacked(
+    event_bus_factory: Callable[..., EventBus], handler_registry: EventHandlerRegistry
+) -> None:
+    """部分处理器从未获得执行权：事件保持未 ack，由持久队列重投。"""
+    queue = _AckRecordingQueue()
+    bus = event_bus_factory(queue=queue, max_handler_semaphore=1)
+    bus._shutdown = ShutdownConfig(
+        queue_timeout_min=0.05, queue_timeout_max=0.1, tasks_timeout=0.05, task_reclaim_delay=0.0
+    )
+    gate = asyncio.Event()
+    first = _GatedHandler(gate)
+    second = _SleepingHandler(delay=0.0)
+    await bus.start()
+    try:
+        await handler_registry.register(first)
+        await handler_registry.register(second)
+        await bus.proxy('test_pub').publish('test.slow')
+        await first.wait_started()
+    finally:
+        await bus.stop()
+
+    assert queue.acked_ids('test.slow') == [], '还有处理器从未启动，不能 ack'
+    assert queue.unfinished == 1, '未 ack 的事件要留在队列计数里（等重投）'
+    assert bus.pending_ack_count == 0, '未打开的闸门由停机清理'
+
+
+@pytest.mark.asyncio
+async def test_middleware_post_processing_does_not_double_ack(
+    event_bus_factory: Callable[..., EventBus], handler_registry: EventHandlerRegistry
+) -> None:
+    """中间件在 next 之后继续 await 时，ack 仍只发生一次（闸门是唯一 ack 点）。"""
+    chain = MiddlewareChain()
+    await chain.add(_PostProcessingMiddleware())
+    queue = _AckRecordingQueue()
+    bus = event_bus_factory(queue=queue, middleware_chain=chain)
+    handler = _SleepingHandler(delay=0.0)
+    await bus.start()
+    try:
+        await handler_registry.register(handler)
+        await bus.proxy('test_pub').publish('test.slow')
+        await handler.wait_completed()
+        await asyncio.sleep(0.1)
+
+        assert queue.acked_ids('test.slow') == [queue.published[0].id]
+        assert bus._dispatch_task is not None and not bus._dispatch_task.done(), '重复 ack 会让分发循环崩溃'
+    finally:
+        await bus.stop()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_fence_opens_once() -> None:
+    """闸门防御重复到达：即使 arrive 多调，也只会 ack 一次。"""
+    from infinity_bus.bus import _DispatchFence
+
+    event = Event(name='fence.test')
+    opened: List[Event] = []
+    fence = _DispatchFence(event, 2, lambda f: opened.append(f.event))
+
+    fence.arrive()
+    fence.arrive()
+    fence.arrive()  # 多余到达不应再次打开
+    await asyncio.sleep(0)
+
+    assert opened == [event]

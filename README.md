@@ -54,7 +54,7 @@
 | Event Return Values | ⚠️ via `request` template | ✅ built-in `event.event_result()` | ❌ | ❌ |
 | Event Forwarding | ⚠️ EventForwardMiddleware | ✅ built-in `event.forward_to()` | ❌ | ❌ |
 | Dependency Count | 1 core (pydantic) + 5 optional | 6 (anyio, aiofiles...) | 0 | 0 |
-| Graceful Shutdown | ✅ drain queue + await active tasks | ✅ wait_until_idle + queue close | ⚠️ `wait_for_complete` + `cancel` | N/A (sync) |
+| Graceful Shutdown | ✅ wait for dispatch + await active tasks | ✅ wait_until_idle + queue close | ⚠️ `wait_for_complete` + `cancel` | N/A (sync) |
 | Timeout Protection | ✅ per-handler timeout | ✅ event_result.timeout | ❌ | N/A |
 | Error Isolation | ✅ TaskErrorEvent unified reporting | ✅ errors logged, bus uninterrupted | ❌ | N/A |
 | Event Dispatch FIFO | ✅ asyncio.Queue guarantees enqueue order | ✅ global lock guarantee | ✅ listeners called in registration order | N/A |
@@ -147,6 +147,15 @@ Class/function names and behavior are unchanged.
 | `start()` re-raises the original startup exception | `start()` raises `BusStartFailed` (clean rollback) or `BusStartRollbackError` (incomplete rollback); catch `BusError` to cover both |
 
 New in v6 (non-breaking additions): middleware task-pipeline hooks (`before_dispatch` / `on_task_start` / `on_task_done`), task-state metrics in `MetricsMiddleware`, and `ShutdownConfig.task_reclaim_delay`.
+
+New in v6.1: **ack means "dispatched", not "processed"** — an event is acknowledged once
+**all of its handler tasks have started running**, driven by a shared per-dispatch start
+fence. A handler that fails, times out, or is cancelled during shutdown no longer affects
+the ack, so normal operations (shutdown, a slow downstream) don't turn into redelivery
+storms. Failures are still reported through `TaskErrorEvent`; retry policy stays with the
+consumer (idempotency template / middleware / compensation). `EventQueue.task_done(event)`
+must carry the event identity so concurrent starts ack the right message (there is no
+fetch-order fallback). New observability property: `EventBus.pending_ack_count`.
 
 ## 🚀 Quick Start
 

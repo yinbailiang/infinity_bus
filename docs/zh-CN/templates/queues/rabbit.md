@@ -68,7 +68,7 @@ q = await RabbitFanoutQueue.create(
 | - | - |
 | `put(event)` | `exchange.publish`（broker 泛洪，含自己队列） |
 | `get()` | 从本地 inbound 取（订阅回调灌入，消息未 ack） |
-| `task_done()` | `basic_ack` 逐条确认（据此补 prefetch 配额） |
+| `task_done(event)` | 按 `event.id` 定位消息并发 `basic_ack`（据此补 prefetch 配额）；找不到时保持未确认 |
 | `join()` | 按策略分离输入并排空（见双策略） |
 | `resume()` | restart 重 `consume` / offline 重 `bind` + `consume` |
 | `qsize()` | 本地 inbound + 未 ack |

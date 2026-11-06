@@ -79,7 +79,7 @@ async def test_fifo_order_and_qsize() -> None:
     for expected in events:
         got = await q.get()
         assert got is expected
-        q.task_done()
+        q.task_done(got)
 
     assert q.qsize() == 0
     await q.join()  # 全部 task_done 后 join 立即返回
@@ -98,7 +98,7 @@ async def test_get_blocks_when_empty() -> None:
     await q.put(event)
     got = await asyncio.wait_for(get_task, timeout=1.0)
     assert got is event
-    q.task_done()
+    q.task_done(got)
 
 
 @pytest.mark.asyncio
@@ -115,7 +115,7 @@ async def test_put_blocks_when_full() -> None:
 
     got = await q.get()
     assert got is first
-    q.task_done()
+    q.task_done(got)
 
     await asyncio.wait_for(put_task, timeout=1.0)
     assert q.qsize() == 1
@@ -142,13 +142,13 @@ async def test_join_waits_until_all_task_done() -> None:
     assert not join_task.done()
 
     first = await q.get()
-    q.task_done()
+    q.task_done(first)
     await asyncio.sleep(0.05)
     assert not join_task.done(), '仅消费一条时 join 不应返回'
 
     second = await q.get()
     assert second is not first
-    q.task_done()
+    q.task_done(second)
     await asyncio.wait_for(join_task, timeout=1.0)
     assert join_task.done()
 
@@ -185,8 +185,8 @@ class RecordingEventQueue(EventQueue):
         self.get_count += 1
         return event
 
-    def task_done(self) -> None:
-        self._inner.task_done()
+    def task_done(self, event: Event) -> None:
+        self._inner.task_done(event)
 
     def qsize(self) -> int:
         return self._inner.qsize()

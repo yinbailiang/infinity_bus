@@ -72,8 +72,8 @@ ignore-nested-functions = true
 ### 覆盖率
 
 ```text
-422 passed · 5 deselected(slow) · 0 failed · 11.4s
-总覆盖率: 94%（2333 statements / 139 missed）
+432 passed · 10 deselected(slow) · 0 failed · 13.6s
+总覆盖率: 94%（2398 statements / 153 missed）
 ```
 
 14 个模块达到 **100%** 覆盖，最低模块 83%（logging）。

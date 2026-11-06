@@ -1,6 +1,6 @@
 """infinity_bus - 基于 asyncio 的轻量级事件总线"""
 
-__version__ = '6.0.0'
+__version__ = '6.1.0'
 
 from .bus import (
     BusError,

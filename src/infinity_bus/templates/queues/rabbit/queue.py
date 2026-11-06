@@ -46,12 +46,15 @@ RabbitMQ/AMQP 是 push 模型、无 Kafka 式 pause/resume 一等 API ——「�
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from typing import Any, Literal, Optional
 
 from infinity_bus import Event, EventQueue, EventRegistry
 
 from ..codec import EventCodec
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # aio-pika 惰性导入 —— 仅 RabbitFanoutQueue.create 需要
@@ -109,7 +112,7 @@ class RabbitFanoutQueue(EventQueue):
         self._consumer_tag: Any = None
         self._consuming: bool = False  # 是否正在消费（join/close 后置 False，resume 恢复）
         self._inbound: asyncio.Queue[tuple[Any, Event]] = asyncio.Queue()
-        self._unacked: list[Any] = []  # 已取出未 ack 的 message（dispatch 在途）
+        self._unacked: list[tuple[Any, Event]] = []  # 已取出未 ack 的 (message, event)
 
     @classmethod
     async def create(
@@ -161,18 +164,26 @@ class RabbitFanoutQueue(EventQueue):
         )
 
     async def get(self) -> Event:
-        """取出队首事件；message 移入 unacked 等待 task_done ack。"""
+        """取出队首事件；message 连同其事件身份移入 unacked，等待 task_done ack。"""
         message, event = await self._inbound.get()
-        self._unacked.append(message)
+        self._unacked.append((message, event))
         return event
 
-    def task_done(self) -> None:
-        """回报一条已处理：basic_ack 确认（RabbitMQ 据此补 prefetch 配额）。"""
-        if not self._unacked:
-            return
-        message = self._unacked.pop(0)
-        # ack 是异步的而 task_done 是同步接口 → 交给事件循环异步发送
-        asyncio.get_running_loop().create_task(self._ack(message))
+    def task_done(self, event: Event) -> None:
+        """回报一条已派发：basic_ack 确认（RabbitMQ 据此补 prefetch 配额）。
+
+        按 ``event.id`` 定位消息——多个事件的处理器并发启动时，启动顺序与取出
+        顺序不同，按队首 ack 会确认错的那一条（丢消息 + 幽灵重投）。
+        """
+        for position, (_, queued) in enumerate(self._unacked):
+            if queued.id == event.id:
+                message, _ = self._unacked.pop(position)
+                # ack 是异步的而 task_done 是同步接口 → 交给事件循环异步发送
+                asyncio.get_running_loop().create_task(self._ack(message))
+                return
+        # 找不到对应消息时不能猜：误 ack 一条尚未派发完的消息会丢数据，
+        # 保持未确认状态，交由 broker 在通道关闭时重投。
+        logger.warning('task_done(event=%s) 找不到对应消息，保持未确认', event.id)
 
     async def _ack(self, message: Any) -> None:
         """异步发送 basic_ack（失败静默，交由 broker 超时/重投兜底）。"""

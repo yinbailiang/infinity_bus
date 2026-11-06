@@ -60,31 +60,67 @@ async def test_put_publishes_encoded_message() -> None:
 
 
 async def test_get_moves_message_to_unacked() -> None:
-    """get 从 inbound 取事件并把 message 移入 unacked。"""
+    """get 从 inbound 取事件，把 (message, event) 一起移入 unacked。"""
     q, _, _, _, _ = _make_q()
     msg: Any = AsyncMock()
     ev = _payload_event()
     await q._inbound.put((msg, ev))
     got = await q.get()
     assert got is ev
-    assert q._unacked == [msg]
+    assert q._unacked == [(msg, ev)]
 
 
 async def test_task_done_acks_message() -> None:
-    """task_done 对 unacked 队首 message 发送 basic_ack。"""
+    """task_done(event) 找到对应消息后发送 basic_ack。"""
     q, _, _, _, _ = _make_q()
     msg: Any = AsyncMock()
-    q._unacked.append(msg)
-    q.task_done()
+    ev = _payload_event()
+    q._unacked.append((msg, ev))
+    q.task_done(ev)
     await asyncio.sleep(0)  # 让 create_task(_ack) 跑完
     msg.ack.assert_awaited_once()
     assert q._unacked == []
 
 
+async def test_task_done_acks_matching_event_not_head() -> None:
+    """按 event 身份定位：并发启动顺序与取出顺序不同时，不能 ack 队首。
+
+    事件 A 的处理器还在排队、事件 B 先启动时，若按队首 ack，确认的是 A 的消息 ——
+    B 的消息随后会被重投（幽灵重投），A 的消息则在尚未派发完时就被确认。
+    """
+    q, _, _, _, _ = _make_q()
+    first_msg: Any = AsyncMock()
+    second_msg: Any = AsyncMock()
+    first = _payload_event()
+    second = _payload_event()
+    q._unacked.extend([(first_msg, first), (second_msg, second)])
+
+    q.task_done(second)
+    await asyncio.sleep(0)
+
+    second_msg.ack.assert_awaited_once()
+    first_msg.ack.assert_not_awaited()
+    assert [event.id for _, event in q._unacked] == [first.id]
+
+
+async def test_task_done_unknown_event_keeps_queue_intact() -> None:
+    """event 不在 unacked 里时不猜、不 ack（避免确认掉尚未派发完的消息）。"""
+    q, _, _, _, _ = _make_q()
+    msg: Any = AsyncMock()
+    ev = _payload_event()
+    q._unacked.append((msg, ev))
+
+    q.task_done(_payload_event())  # 另一条同类型但不同 id 的事件
+    await asyncio.sleep(0)
+
+    msg.ack.assert_not_awaited()
+    assert [event.id for _, event in q._unacked] == [ev.id]
+
+
 async def test_task_done_empty_is_noop() -> None:
     """unacked 为空时 task_done 无副作用。"""
     q, _, _, _, _ = _make_q()
-    q.task_done()  # 不抛即可
+    q.task_done(_payload_event())  # 不抛即可
 
 
 async def test_ack_error_is_silent() -> None:
