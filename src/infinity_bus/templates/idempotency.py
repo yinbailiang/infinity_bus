@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Protocol, Union
 
@@ -47,31 +48,76 @@ class IdempotencyRecorder(Protocol):
 
 
 class InMemoryIdempotencyRecorder:
-    """进程内内存幂等记录器：最简单的注入策略（进程内去重）。"""
+    """进程内内存幂等记录器：最简单的注入策略（进程内去重）。
 
-    def __init__(self) -> None:
-        """构造空去重表。"""
-        self._seen: set[tuple[str, str]] = set()
+    **有界**：记录数超过 ``max_entries`` 时按插入顺序淘汰最旧条目（FIFO）；可选的
+    ``ttl_seconds`` 在读写路径上惰性过期（0 = 不过期）。被淘汰 / 过期的记录不再提供
+    去重保护 —— 对进程内尽力去重可接受；需要跨重启强幂等请用 SQLite 版。
+    """
+
+    def __init__(self, *, max_entries: int = 100_000, ttl_seconds: float = 0.0) -> None:
+        """构造有界去重表。
+
+        max_entries：最多保留的记录数（0 = 无界）；超出时按插入顺序淘汰最旧条目。
+        ttl_seconds：记录有效期（秒，0 = 不过期）；在读写路径上惰性清理。
+        """
+        if max_entries < 0:
+            raise ValueError('max_entries 不能为负数')
+        if ttl_seconds < 0:
+            raise ValueError('ttl_seconds 不能为负数')
+        self._max_entries: int = max_entries
+        self._ttl_seconds: float = ttl_seconds
+        self._seen: OrderedDict[tuple[str, str], float] = OrderedDict()
+
+    def _now(self) -> float:
+        return asyncio.get_running_loop().time()
+
+    def _prune_expired(self, now: float) -> None:
+        if self._ttl_seconds <= 0:
+            return
+        while self._seen:
+            _, ts = next(iter(self._seen.items()))
+            if now - ts < self._ttl_seconds:
+                break
+            self._seen.popitem(last=False)
+
+    def _trim_size(self) -> None:
+        if self._max_entries <= 0:
+            return
+        while len(self._seen) > self._max_entries:
+            self._seen.popitem(last=False)
+
+    def _record(self, consumer: str, event_id: str) -> None:
+        now = self._now()
+        self._prune_expired(now)
+        key = (consumer, event_id)
+        self._seen.pop(key, None)  # 重复标记刷新为最新（延长 TTL）
+        self._seen[key] = now
+        self._trim_size()
 
     async def is_processed(self, consumer: str, event_id: str) -> bool:
         """(consumer, event_id) 是否已处理。"""
+        self._prune_expired(self._now())
         return (consumer, event_id) in self._seen
 
     async def mark_processed(self, consumer: str, event_id: str) -> None:
-        """记录已处理（幂等：重复添加无副作用）。"""
-        self._seen.add((consumer, event_id))
+        """记录已处理（幂等：重复标记无副作用，并刷新其时间戳）。"""
+        self._record(consumer, event_id)
 
     async def claim(self, consumer: str, event_id: str) -> bool:
         """原子认领：未处理则记录并返回 ``True``；已处理返回 ``False``。"""
+        now = self._now()
+        self._prune_expired(now)
         key = (consumer, event_id)
         if key in self._seen:
             return False
-        self._seen.add(key)
+        self._seen[key] = now
+        self._trim_size()
         return True
 
     async def release(self, consumer: str, event_id: str) -> None:
         """撤回认领（删除标记；不存在时无副作用）。"""
-        self._seen.discard((consumer, event_id))
+        self._seen.pop((consumer, event_id), None)
 
 
 class SqliteIdempotencyRecorder:
@@ -126,6 +172,8 @@ class SqliteIdempotencyRecorder:
                 ' ts TEXT NOT NULL,'
                 ' PRIMARY KEY (consumer, event_id))'
             )
+            # prune 按 ts 删除；没有索引时每次清理都是全表扫描
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_processed_log_ts ON processed_log(ts)')
             conn.commit()
             return conn
 

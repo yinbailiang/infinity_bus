@@ -290,3 +290,71 @@ async def test_sqlite_claim_is_atomic(tmp_path: Path) -> None:
         assert await r.claim('c', 'e1') is True, '撤回认领后重投应能重新派发'
     finally:
         await r.close()
+
+
+# ============================================================================
+# InMemory recorder 的有界性
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_inmemory_recorder_is_bounded() -> None:
+    """容量上限：超出后按插入顺序淘汰最旧记录，不会无界增长。"""
+    r = InMemoryIdempotencyRecorder(max_entries=2)
+    assert await r.claim('c', 'e1') is True
+    assert await r.claim('c', 'e2') is True
+    assert await r.claim('c', 'e3') is True
+
+    assert await r.is_processed('c', 'e1') is False, '最旧记录应被淘汰'
+    assert await r.is_processed('c', 'e2') is True
+    assert await r.is_processed('c', 'e3') is True
+
+
+@pytest.mark.asyncio
+async def test_inmemory_recorder_ttl_expires() -> None:
+    """TTL：过期记录在读写路径上被惰性清理。"""
+    r = InMemoryIdempotencyRecorder(ttl_seconds=0.05)
+    assert await r.claim('c', 'e1') is True
+    await asyncio.sleep(0.06)
+
+    assert await r.is_processed('c', 'e1') is False
+    assert await r.claim('c', 'e1') is True, '过期后重投应能重新认领'
+
+
+@pytest.mark.asyncio
+async def test_inmemory_recorder_unbounded_when_zero() -> None:
+    """max_entries=0 保留无界语义（显式选择）。"""
+    r = InMemoryIdempotencyRecorder(max_entries=0)
+    for i in range(100):
+        assert await r.claim('c', f'e{i}') is True
+
+    for i in range(100):
+        assert await r.is_processed('c', f'e{i}')
+
+
+def test_inmemory_recorder_rejects_negative_limits() -> None:
+    """负数参数当场报错，而不是留下隐形的错误配置。"""
+    with pytest.raises(ValueError, match='max_entries'):
+        InMemoryIdempotencyRecorder(max_entries=-1)
+    with pytest.raises(ValueError, match='ttl_seconds'):
+        InMemoryIdempotencyRecorder(ttl_seconds=-1)
+
+
+@pytest.mark.asyncio
+async def test_sqlite_recorder_indexes_ts(tmp_path: Path) -> None:
+    """prune 依赖 ts 索引，避免每次清理全表扫描。"""
+    import sqlite3
+
+    db = tmp_path / 'dedupe.sqlite'
+    recorder = SqliteIdempotencyRecorder(str(db))
+    await recorder.start()
+    try:
+        conn = sqlite3.connect(str(db))
+        try:
+            names = {str(row[0]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+        finally:
+            conn.close()
+    finally:
+        await recorder.close()
+
+    assert 'idx_processed_log_ts' in names

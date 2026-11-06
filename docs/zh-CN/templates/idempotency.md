@@ -97,13 +97,17 @@ class DedupMiddleware(Middleware):
 > `claim` 是**处理前**记账（失败不会自动撤回）；`release` 与中间件
 > `on_dispatch_abandoned` 配合，保证「认领 ⇔ 真的交给处理器」。
 
+> 进程内记录器是**有界**的：`max_entries`（默认 100000，0 = 无界）超出后按插入顺序
+> 淘汰最旧记录；`ttl_seconds`（默认 0）可让记录过期。被淘汰 / 过期的记录会失去去重
+> 保护，重复投递可能再次执行——需要强幂等请用 SQLite 版。
+
 ---
 
 ## 注入策略
 
 | 策略 | 说明 |
 | - | - |
-| `InMemoryIdempotencyRecorder` | 进程内 `set` 去重（会话内） |
+| `InMemoryIdempotencyRecorder` | 进程内**有界**去重（默认最多 100k 条，按插入顺序淘汰最旧；可选 TTL） |
 | `SqliteIdempotencyRecorder` | SQLite 持久（stdlib `sqlite3` + `asyncio.to_thread`，零第三方依赖）；「处理完成日志 = 幂等表」，跨进程 / 跨重启去重 |
 
 ### SQLite 持久版
@@ -133,7 +137,8 @@ finally:
 
 只保留 `retention_seconds` 内的记录（默认 7 天）：`start()` 时清一次，之后每
 `sweep_interval_seconds` 在写路径上顺带清一次；也可手工 `await recorder.prune()`
-（返回删除条数）。不清的话这张表只增不减（实测单个消费方一天 5 万行）。
+（返回删除条数）。不清的话这张表只增不减（实测单个消费方一天 5 万行）。`ts` 建有
+索引（`idx_processed_log_ts`），保留期清理不会全表扫描。
 
 ---
 

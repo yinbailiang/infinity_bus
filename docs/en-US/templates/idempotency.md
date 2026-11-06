@@ -101,13 +101,18 @@ class DedupMiddleware(Middleware):
 > with the `on_dispatch_abandoned` middleware hook so that "claimed ⇔ actually handed
 > to the handlers".
 
+> The in-process recorder is **bounded**: once `max_entries` (default 100000, 0 = unbounded)
+> is exceeded, the oldest entries are evicted in insertion order; `ttl_seconds` (default 0)
+> can expire records. Evicted / expired records lose their dedup protection, so a duplicate
+> may run again — use the SQLite policy when strong idempotency is required.
+
 ---
 
 ## Injected Policies
 
 | Policy | Description |
 | - | - |
-| `InMemoryIdempotencyRecorder` | In-process `set` dedup (session scope) |
+| `InMemoryIdempotencyRecorder` | In-process **bounded** dedup (default max 100k entries, FIFO eviction; optional TTL) |
 | `SqliteIdempotencyRecorder` | SQLite-persistent (stdlib `sqlite3` + `asyncio.to_thread`, zero third-party deps); "processed log = dedup table", dedups across processes / restarts |
 
 ### SQLite persistent
@@ -139,7 +144,8 @@ acceptable for a dedup table: worst case the event runs one extra time.
 Rows older than `retention_seconds` (default 7 days) are pruned on `start()`, then every
 `sweep_interval_seconds` on the write path; `await recorder.prune()` is available for
 manual maintenance and returns the deleted row count. Without pruning the table only
-grows (measured 50k rows/day for a single consumer).
+grows (measured 50k rows/day for a single consumer). `ts` is indexed
+(`idx_processed_log_ts`), so retention pruning does not scan the whole table.
 
 ---
 
