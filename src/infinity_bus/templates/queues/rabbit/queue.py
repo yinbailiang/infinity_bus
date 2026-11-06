@@ -99,8 +99,13 @@ class RabbitFanoutQueue(EventQueue):
         member_id: str,
         codec: EventCodec,
         strategy: Literal['restart', 'offline'] = 'restart',
+        drain_timeout: float = 15.0,
     ) -> None:
-        """构造实例（通常经 :meth:`create`，不直接调用）。"""
+        """构造实例（通常经 :meth:`create`，不直接调用）。
+
+        drain_timeout：``join`` 内部排空（等 inbound 取完、等 unacked 全部结清）的上限
+        秒数——它应小于总线侧的停机预算，否则 SIGKILL 会让未 ack 的消息被重投。
+        """
         self._conn: Any = connection
         self._channel: Any = channel
         self._queue: Any = queue
@@ -108,11 +113,27 @@ class RabbitFanoutQueue(EventQueue):
         self.member_id = member_id
         self._codec: EventCodec = codec
         self._strategy: Literal['restart', 'offline'] = strategy
+        self._drain_timeout: float = drain_timeout
         self._bound: bool = True  # 队列是否绑定 exchange（offline join 后置 False）
         self._consumer_tag: Any = None
         self._consuming: bool = False  # 是否正在消费（join/close 后置 False，resume 恢复）
         self._inbound: asyncio.Queue[tuple[Any, Event]] = asyncio.Queue()
         self._unacked: list[tuple[Any, Event]] = []  # 已取出未 ack 的 (message, event)
+
+    @property
+    def strategy(self) -> Literal['restart', 'offline']:
+        """当前停机策略：``restart`` 保留积压补投，``offline`` 解绑并排空。"""
+        return self._strategy
+
+    def set_strategy(self, strategy: Literal['restart', 'offline']) -> None:
+        """切换停机策略：``join`` 只在停机那一刻读它，所以运行期切换是安全的。
+
+        存在是因为「这次是重启还是下线」由决策方（如 supervisor）在停机前才确定，
+        而队列是启动时建好的；没有这个入口就只能去摸私有字段。
+        """
+        if strategy not in ('restart', 'offline'):
+            raise ValueError(f'未知停机策略：{strategy!r}（只支持 restart / offline）')
+        self._strategy = strategy
 
     @classmethod
     async def create(
@@ -123,6 +144,7 @@ class RabbitFanoutQueue(EventQueue):
         codec: Optional[EventCodec] = None,
         registry: Optional[EventRegistry] = None,
         strategy: Literal['restart', 'offline'] = 'restart',
+        drain_timeout: float = 15.0,
     ) -> 'RabbitFanoutQueue':
         """连接 broker、声明持久队列并绑定 fanout exchange，开始消费。
 
@@ -132,6 +154,7 @@ class RabbitFanoutQueue(EventQueue):
         注入 registry 的用法。
         strategy：'restart'（重启，join 保留路由与积压 → resume 补投）或 'offline'
         （下线，join 停路由并消费掉所有已路由 → resume 只收新）。
+        drain_timeout：``join`` 内部排空的上限秒数，应小于总线侧的停机预算。
         """
         if _aio_pika is None:
             raise ImportError(
@@ -144,7 +167,16 @@ class RabbitFanoutQueue(EventQueue):
         exchange = await channel.declare_exchange(EXCHANGE, _aio_pika.ExchangeType.FANOUT, durable=True)
         queue = await channel.declare_queue(_queue_name(member_id), durable=True)
         await queue.bind(exchange)
-        q = cls(connection, channel, queue, exchange, member_id, actual_codec, strategy=strategy)
+        q = cls(
+            connection,
+            channel,
+            queue,
+            exchange,
+            member_id,
+            actual_codec,
+            strategy=strategy,
+            drain_timeout=drain_timeout,
+        )
         q._consumer_tag = await queue.consume(q._on_message, no_ack=False)
         q._consuming = True
         return q
@@ -263,7 +295,7 @@ class RabbitFanoutQueue(EventQueue):
 
     async def _drain_local(self) -> None:
         """排空本地已投递：inbound 全被 get、unacked 全 ack（restart 的排空范围）。"""
-        deadline = asyncio.get_running_loop().time() + 15.0
+        deadline = asyncio.get_running_loop().time() + self._drain_timeout
         while self._inbound.qsize() or self._unacked:
             if asyncio.get_running_loop().time() >= deadline:
                 return
@@ -271,7 +303,7 @@ class RabbitFanoutQueue(EventQueue):
 
     async def _drain_all(self) -> None:
         """消费掉所有已路由：broker 积压归零 且 本地排空（offline 的排空范围）。"""
-        deadline = asyncio.get_running_loop().time() + 15.0
+        deadline = asyncio.get_running_loop().time() + self._drain_timeout
         while True:
             if self._inbound.qsize() == 0 and not self._unacked and await self._broker_backlog() == 0:
                 return

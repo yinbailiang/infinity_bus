@@ -85,6 +85,8 @@ class Middleware(ABC):
     async def on_task_start(self, record: TaskRecord) -> None: ...
 
     async def on_task_done(self, record: TaskRecord) -> None: ...
+
+    async def on_dispatch_abandoned(self, event: Event) -> None: ...
 ```
 
 ### 钩子详解
@@ -158,6 +160,14 @@ class Middleware(ABC):
 
 等待信号量期间即被取消、从未开始的任务不会触发（与 `on_task_start` 严格配对）；钩子异常同样被隔离记录，不改变任务结果。
 
+#### `on_dispatch_abandoned(event)`
+
+派发**被放弃**钩子（通知式，可选实现）—— 停机收尾时，该事件仍有处理器任务从未获得执行权（一直堵在并发信号量上被取消），因此闸门没关上、事件不会被 ack。与 `EventQueue.task_abandoned(event)` 同一次清理触发，对每条未完整派发的事件调用一次。
+
+它与 `on_task_done` 的 `cancelled` / `skipped` 不同：这里代表事件**没有完整交给处理器**，而不是交给处理器后出错。去重 / 认领型中间件应在此撤回在 `before_dispatch` 里写下的认领，否则 broker 重投回来的事件会被自己的去重逻辑挡住，导致「既没执行、也不会再执行」。钩子异常按通知链约定逐中间件隔离记录，不影响停机。
+
+> **事件级通知**：事件只要有任务未启动就会触发。部分处理器已启动时，重投后它们也可能再次执行（认领不区分 handler）——副作用需幂等或按处理器维度去重。
+
 ---
 
 ## MiddlewareChain
@@ -209,12 +219,13 @@ class MiddlewareChain:
 | `build_dispatch(final_handler)` | 构建 ``before_dispatch`` 责任链（链末端为「按 id 列表创建任务」的总线逻辑）。 |
 | `build_task_start(final_handler)` | 构建 ``on_task_start`` 通知链（逐中间件错误隔离后继续）。 |
 | `build_task_done(final_handler)` | 构建 ``on_task_done`` 通知链（逐中间件错误隔离后继续）。 |
+| `build_dispatch_abandoned(final_handler)` | 构建 ``on_dispatch_abandoned`` 通知链（逐中间件错误隔离后继续）。 |
 | `setup(bus)` | 按注册顺序调用所有中间件的 `on_setup`。**原子（fail-fast）**：任一 `on_setup` 抛错即解绑，并对**已尝试的中间件（含失败者）**补发 `on_teardown` 后向上抛出——中间件保留在链中（修复后可重试），与处理器 `activate` 语义一致。 |
 | `teardown(bus)` | 按注册**逆序**调用所有中间件的 `on_teardown`。单个异常不影响其他。**幂等**。返回 `[(middleware, 异常), ...]` 失败清单，调用方（如 `EventBus.stop()`）可感知清理不完整；传 `strict=True` 在全部尝试后抛出首个失败。 |
 
 ### 责任链构建
 
-每次发布时，`build_before_publish()`、`build_on_publish()` 和 `build_on_publish_error()` 会惰性构建责任链；分发与任务生命周期同理——`build_dispatch()`（每次分发）、`build_task_start()` / `build_task_done()`（每个任务）。构建结果被缓存，当中间件列表变更时自动失效。总线内部在发布 / 分发 / 任务三个时机通过对应方法将中间件列表包装为可调用链。
+每次发布时，`build_before_publish()`、`build_on_publish()` 和 `build_on_publish_error()` 会惰性构建责任链；分发与任务生命周期同理——`build_dispatch()`（每次分发）、`build_task_start()` / `build_task_done()`（每个任务）、`build_dispatch_abandoned()`（停机时未完整派发的事件）。构建结果被缓存，当中间件列表变更时自动失效。总线内部在发布 / 分发 / 任务三个时机通过对应方法将中间件列表包装为可调用链。
 
 ---
 

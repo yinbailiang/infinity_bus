@@ -1468,8 +1468,8 @@ class _AckRecordingQueue(EventQueue):
 class _SleepingHandler(BaseTestHandler):
     """睡固定时长后成功返回的处理器。"""
 
-    def __init__(self, delay: float = 0.2) -> None:
-        super().__init__(['test.slow'], handle_timeout=5.0)
+    def __init__(self, delay: float = 0.2, event_name: str = 'test.slow') -> None:
+        super().__init__([event_name], handle_timeout=5.0)
         self.delay = delay
 
     async def _do_handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
@@ -1517,6 +1517,63 @@ class _PostProcessingMiddleware(Middleware):
     async def before_dispatch(self, event: Event, handler_ids: list[str], next: DispatchNext) -> None:
         await next(event, handler_ids)
         await asyncio.sleep(0.05)
+
+
+class _ClaimingMiddleware(Middleware):
+    """派发边界认领（模拟去重）：派发被放弃时撤回认领。"""
+
+    def __init__(self) -> None:
+        self.claimed: set[str] = set()
+        self.abandoned: List[str] = []
+
+    async def before_publish(
+        self,
+        event_registry: EventRegistry,
+        name: str,
+        source: str,
+        data: dict[str, Any] | BaseModel | None,
+        old_event: Event | None,
+        next: BeforePublishNext,
+    ) -> None:
+        await next(event_registry, name, source, data, old_event)
+
+    async def on_publish(self, event: Event, next: OnPublishNext) -> None:
+        await next(event)
+
+    async def before_dispatch(self, event: Event, handler_ids: list[str], next: DispatchNext) -> None:
+        if event.id in self.claimed:
+            return
+        self.claimed.add(event.id)
+        await next(event, handler_ids)
+
+    async def on_dispatch_abandoned(self, event: Event) -> None:
+        self.abandoned.append(event.id)
+        self.claimed.discard(event.id)
+
+
+class _ExplodingAbandonedMiddleware(Middleware):
+    """``on_dispatch_abandoned`` 必抛异常，用于验证逐中间件错误隔离。"""
+
+    def __init__(self) -> None:
+        self.called = 0
+
+    async def before_publish(
+        self,
+        event_registry: EventRegistry,
+        name: str,
+        source: str,
+        data: dict[str, Any] | BaseModel | None,
+        old_event: Event | None,
+        next: BeforePublishNext,
+    ) -> None:
+        await next(event_registry, name, source, data, old_event)
+
+    async def on_publish(self, event: Event, next: OnPublishNext) -> None:
+        await next(event)
+
+    async def on_dispatch_abandoned(self, event: Event) -> None:
+        self.called += 1
+        raise RuntimeError('abandoned boom')
 
 
 @pytest.mark.asyncio
@@ -1661,6 +1718,68 @@ async def test_handler_never_started_leaves_event_unacked(
     assert queue.unfinished == 0, '内存队列没有重投能力：放弃的事件必须结清计数'
     await asyncio.wait_for(queue.join(), timeout=1.0)  # 后续 join 不会永久等待
     assert bus.pending_ack_count == 0, '未打开的闸门由停机清理'
+
+
+@pytest.mark.asyncio
+async def test_dispatch_abandoned_hook_allows_claim_withdrawal(
+    event_bus_factory: Callable[..., EventBus], handler_registry: EventHandlerRegistry
+) -> None:
+    """未启动任务的事件要通知中间件撤回认领，否则 broker 重投会被去重挡掉。"""
+    queue = _AckRecordingQueue()
+    mw = _ClaimingMiddleware()
+    chain = MiddlewareChain()
+    await chain.add(mw)
+    bus = event_bus_factory(queue=queue, max_handler_semaphore=1, middleware_chain=chain)
+    bus._shutdown = ShutdownConfig(queue_timeout_min=0.05, queue_timeout_max=0.1, tasks_timeout=0.05)
+    gate = asyncio.Event()
+    first = _GatedHandler(gate)
+    second = _SleepingHandler(delay=0.0, event_name='user.login')
+    await bus.start()
+    try:
+        await handler_registry.register(first)
+        await handler_registry.register(second)
+        await bus.proxy('test_pub').publish('test.slow')
+        await bus.proxy('test_pub').publish('user.login')
+        await first.wait_started()
+        await asyncio.sleep(0.05)  # 让第二条事件完成派发、其任务堵在信号量上
+    finally:
+        await bus.stop()
+
+    dispatched_id = queue.published[0].id
+    stuck_id = queue.published[1].id
+    assert mw.abandoned == [stuck_id], '只有未完整派发的事件触发 on_dispatch_abandoned'
+    assert stuck_id not in mw.claimed, '放弃派发后必须撤回认领，重投才能重新派发'
+    assert dispatched_id in mw.claimed, '已完整派发的事件保留认领'
+
+
+@pytest.mark.asyncio
+async def test_dispatch_abandoned_hook_errors_are_isolated(
+    event_bus_factory: Callable[..., EventBus], handler_registry: EventHandlerRegistry
+) -> None:
+    """单个中间件的 on_dispatch_abandoned 异常不影响其余中间件与停机。"""
+    exploding = _ExplodingAbandonedMiddleware()
+    recorder = _ClaimingMiddleware()
+    chain = MiddlewareChain()
+    await chain.add(exploding)
+    await chain.add(recorder)
+    bus = event_bus_factory(max_handler_semaphore=1, middleware_chain=chain)
+    bus._shutdown = ShutdownConfig(queue_timeout_min=0.05, queue_timeout_max=0.1, tasks_timeout=0.05)
+    gate = asyncio.Event()
+    first = _GatedHandler(gate)
+    second = _SleepingHandler(delay=0.0, event_name='user.login')
+    await bus.start()
+    try:
+        await handler_registry.register(first)
+        await handler_registry.register(second)
+        await bus.proxy('test_pub').publish('test.slow')
+        await bus.proxy('test_pub').publish('user.login')
+        await first.wait_started()
+        await asyncio.sleep(0.05)
+    finally:
+        await bus.stop()
+
+    assert exploding.called == 1
+    assert len(recorder.abandoned) == 1, '前一个中间件抛错不能阻断后续钩子'
 
 
 @pytest.mark.asyncio

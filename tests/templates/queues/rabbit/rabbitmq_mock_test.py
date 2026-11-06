@@ -308,3 +308,33 @@ async def test_create_success_with_mock_driver(monkeypatch) -> None:
     channel.set_qos.assert_awaited_once()
     queue.bind.assert_awaited_once()
     fake_driver.connect_robust.assert_awaited_once_with('amqp://x')
+
+
+async def test_strategy_property_and_setter() -> None:
+    """运行期切换停机策略：join 只在停机那一刻读它。"""
+    q, _, _, _, _ = _make_q('restart')
+    assert q.strategy == 'restart'
+
+    q.set_strategy('offline')
+    assert q.strategy == 'offline'
+    assert q._strategy == 'offline'
+
+
+async def test_set_strategy_rejects_unknown_value() -> None:
+    """写错策略名要当场报错，而不是等到停机才发现没生效。"""
+    q, _, _, _, _ = _make_q()
+    with pytest.raises(ValueError, match='restart'):
+        q.set_strategy('offiline')  # type: ignore[arg-type]
+
+
+async def test_drain_timeout_is_configurable() -> None:
+    """join 内部排空的上限可配：硬编码 15 秒会让停机被 SIGKILL 截断。"""
+    q, _, _, _, _ = _make_q()
+    q._drain_timeout = 0.05
+    await q._inbound.put((AsyncMock(), _payload_event()))  # 没人消费 → 排不空
+
+    started = asyncio.get_running_loop().time()
+    await q._drain_local()
+    elapsed = asyncio.get_running_loop().time() - started
+
+    assert elapsed < 1.0, f'排空等了 {elapsed:.2f}s，drain_timeout 没生效'

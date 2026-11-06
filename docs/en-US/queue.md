@@ -33,7 +33,7 @@ class EventQueue(ABC):
 | `put(event)` | Enqueues on the publishing side. Blocks until a slot frees when full — backpressure. |
 | `get()` | Dequeues on the dispatch side. Blocks until an event arrives when empty. |
 | `task_done(event)` | Called once **after all handler tasks of that event have started**; used by `join()` to detect drain. `event` lets cross-process implementations locate the exact message (concurrent starts may differ from fetch order). |
-| `task_abandoned(event)` | Called on shutdown when an event was **not fully dispatched** (some handler tasks never started): tells the queue to stop waiting. The default implementation equals `task_done(event)` (in-process queues release the count); redelivering implementations should override it to drop local tracking **without acking**, so the broker redelivers when the channel closes. |
+| `task_abandoned(event)` | Called on shutdown when an event was **not fully dispatched** (some handler tasks never started): tells the queue to stop waiting. The default implementation equals `task_done(event)` (in-process queues release the count); redelivering implementations should override it to drop local tracking **without acking**, so the broker redelivers when the channel closes. The same cleanup also fires the `on_dispatch_abandoned(event)` middleware hook so dedup / claiming middlewares can withdraw their claims. |
 | `qsize()` | Backlog depth; used for observability and dispatch-wait timeout estimation on shutdown. |
 | `join()` | Blocks until every enqueued event has been fetched and `task_done(event)`-ed (the event has been fully dispatched; key to no-loss graceful shutdown). |
 

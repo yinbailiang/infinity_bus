@@ -37,6 +37,7 @@ q = await RabbitFanoutQueue.create(
     codec=None,                # EventCodec; defaults to EventCodec(registry)
     registry=None,             # event registry (basis for payload rebuild)
     strategy='restart',        # 'restart' | 'offline'
+    drain_timeout=15.0,        # join's internal drain limit (seconds)
 )
 ```
 
@@ -46,7 +47,21 @@ q = await RabbitFanoutQueue.create(
 | `url` | `str` | AMQP URL; defaults to `RABBITMQ_URL` or `amqp://guest:guest@127.0.0.1:5672/` |
 | `codec` | `EventCodec \| None` | Codec; defaults to `EventCodec(registry)` |
 | `registry` | `EventRegistry \| None` | Event registry |
-| `strategy` | `'restart' \| 'offline'` | Member leave strategy |
+| `strategy` | `'restart' \| 'offline'` | Member leave strategy (switchable via `set_strategy()` at runtime) |
+| `drain_timeout` | `float` | Upper bound for `join`'s internal drain (seconds); keep it below the shutdown budget |
+
+---
+
+## Switching strategy at runtime
+
+```python
+q.strategy                 # 'restart' | 'offline'
+q.set_strategy('offline')  # join only reads it at shutdown, so runtime switching is safe
+```
+
+Whether "this is a restart or a leave" is often decided by the operator (e.g. a process
+manager) right before shutdown, while the queue is built at startup; use
+`set_strategy()` instead of touching the private field.
 
 ---
 
