@@ -92,6 +92,8 @@ class Middleware(ABC):
     async def on_task_start(self, record: TaskRecord) -> None: ...
 
     async def on_task_done(self, record: TaskRecord) -> None: ...
+
+    async def on_dispatch_abandoned(self, event: Event) -> None: ...
 ```
 
 ### Hook Details
@@ -165,6 +167,12 @@ Task-**reclaim** hook (notification, optional) — fires when the task ends (suc
 
 Tasks cancelled while waiting for the semaphore (never started) do not fire — strictly paired with `on_task_start`. Hook errors are isolated the same way and never change the task outcome.
 
+#### `on_dispatch_abandoned(event)`
+
+Dispatch-**abandoned** hook (notification, optional) — fires during shutdown teardown when some handler task of that event **never acquired the execution semaphore** and was cancelled, so the start fence never opened and the event is not acked. It is triggered by the same cleanup as `EventQueue.task_abandoned(event)`, once per not-fully-dispatched event.
+
+Unlike `on_task_done`'s `cancelled` / `skipped`, this means the event was **never fully handed to the handlers** — not that a handler failed. Dedup / claiming middlewares should withdraw the claim they wrote in `before_dispatch`; otherwise a redelivered event will be blocked by their own dedup logic and end up "never executed and never re-executed". Hook errors are isolated per middleware and never affect shutdown.
+
 ---
 
 ## MiddlewareChain
@@ -213,6 +221,7 @@ class MiddlewareChain:
 | `build_dispatch(f)` | Build the `before_dispatch` chain; the innermost handler creates tasks for the final id list. |
 | `build_task_start(f)` | Build the `on_task_start` notification chain (per-middleware error isolation, always continues). |
 | `build_task_done(f)` | Build the `on_task_done` notification chain (per-middleware error isolation, always continues). |
+| `build_dispatch_abandoned(f)` | Build the `on_dispatch_abandoned` notification chain (per-middleware error isolation, always continues). |
 | `setup(bus)` | Call `on_setup` on all middlewares in registration order. **Atomic (fail-fast)**: if any `on_setup` raises, the chain unbinds and fires `on_teardown` on every middleware already attempted (including the failing one), then re-raises — middlewares stay in the chain so you can fix and retry. Consistent with handler `activate`. |
 | `teardown(bus)` | Call `on_teardown` on all middlewares in **reverse** order. **Idempotent**. Returns `[(middleware, exception), ...]` so callers (e.g. `EventBus.stop()`) can observe incomplete cleanup; pass `strict=True` to raise the first failure after attempting all. |
 

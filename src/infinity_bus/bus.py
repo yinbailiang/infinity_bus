@@ -310,6 +310,12 @@ class EventBus:
     ) -> None:
         """task 通知链（on_task_start / on_task_done）的末端处理器（空操作）"""
 
+    @staticmethod
+    async def _noop_dispatch_abandoned(
+        event: Event,
+    ) -> None:
+        """on_dispatch_abandoned 链的末端处理器（空操作）"""
+
     @property
     def router(self) -> Router:
         """事件路由器：订阅管理与分派（handler 在 on_activate 时经此登记订阅）。"""
@@ -368,7 +374,7 @@ class EventBus:
             self._enable_publish.clear()
             self._running.clear()
             await self._wait_all_tasks_done()
-            self._clear_fences()
+            await self._clear_fences()
         except Exception:
             logger.exception('Failed to roll back dispatch during start')
         handler_failures: list[tuple[str, Exception]] = []
@@ -410,7 +416,7 @@ class EventBus:
                     pass
 
             await self._wait_all_tasks_done()  # 等待所有处理器任务完成
-            self._clear_fences()  # 未完整派发的事件：内存队列结清计数，持久队列等重投
+            await self._clear_fences()  # 未完整派发的事件：撤回认领 + 内存队列结清计数，持久队列等重投
 
             self._running.clear()
             failures = await self._handlers.deactivate()
@@ -621,14 +627,18 @@ class EventBus:
         """向队列确认「这条事件已派发完成」，携带事件身份以精确定位消息。"""
         self._queue.task_done(event)
 
-    def _clear_fences(self) -> None:
-        """丢弃未打开的闸门（停机收尾）。
+    async def _clear_fences(self) -> None:
+        """处理未打开的闸门（停机收尾）。
 
-        未打开 = 仍有处理器任务没开始执行 = 事件没有完整派发。逐个通知队列停止等待
-        该事件：进程内队列结清计数（无重投能力），持久队列保持未 ack（由 broker
-        在通道关闭时重投）。
+        未打开 = 仍有处理器任务没开始执行 = 事件没有完整派发。先给中间件撤回认领的
+        机会（``on_dispatch_abandoned``），再通知队列停止等待该事件：进程内队列结清
+        计数（无重投能力），持久队列保持未 ack（由 broker 在通道关闭时重投）。
         """
-        for fence in self._pending_fences:
+        for fence in list(self._pending_fences):
+            try:
+                await self._mw_chain.build_dispatch_abandoned(self._noop_dispatch_abandoned)(fence.event)
+            except Exception:
+                logger.exception('Middleware chain failed to handle abandoned dispatch (event=%s)', fence.event.id)
             try:
                 self._queue.task_abandoned(fence.event)
             except Exception:

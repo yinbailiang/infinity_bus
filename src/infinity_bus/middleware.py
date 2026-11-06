@@ -63,6 +63,9 @@ DispatchNext = Callable[[Event, list[str]], Awaitable[None]]
 TaskNotifyNext = Callable[[TaskRecord], Awaitable[None]]
 """on_task_start / on_task_done 链中 next 回调的签名"""
 
+DispatchAbandonedNext = Callable[[Event], Awaitable[None]]
+"""on_dispatch_abandoned 链中 next 回调的签名"""
+
 
 class Middleware(ABC):
     """事件总线中间件基类。"""
@@ -162,6 +165,19 @@ class Middleware(ABC):
         """
         pass
 
+    async def on_dispatch_abandoned(self, event: Event) -> None:
+        """派发**被放弃**钩子 —— 停机收尾时，该事件仍有处理器任务从未获得执行权。
+
+        与 ``EventQueue.task_abandoned(event)`` 同一次清理触发，对每条「闸门没
+        关上」的事件调用一次。它与 ``on_task_done`` 的 ``cancelled`` / ``skipped``
+        不同：这里代表事件**没有完整交给处理器**，而不是交给处理器后出错。
+
+        去重 / 认领型中间件应在此撤回在 ``before_dispatch`` 里写下的认领，否则
+        broker 重投回来的事件会被自己的去重逻辑挡住，导致「既没执行、也不会再
+        执行」。钩子异常被逐中间件隔离记录，不影响停机。
+        """
+        pass
+
 
 class MiddlewareChain:
     """中间件链管理器。"""
@@ -175,6 +191,7 @@ class MiddlewareChain:
         self._cached_dispatch: DispatchNext | None = None
         self._cached_task_start: TaskNotifyNext | None = None
         self._cached_task_done: TaskNotifyNext | None = None
+        self._cached_dispatch_abandoned: DispatchAbandonedNext | None = None
 
     def _invalidate(self) -> None:
         """清空缓存（中间件列表变更时调用）。"""
@@ -184,6 +201,7 @@ class MiddlewareChain:
         self._cached_dispatch = None
         self._cached_task_start = None
         self._cached_task_done = None
+        self._cached_dispatch_abandoned = None
 
     async def add(self, middleware: Middleware) -> 'MiddlewareChain':
         """在链**末尾**追加一个中间件。"""
@@ -392,6 +410,18 @@ class MiddlewareChain:
             self._cached_task_done = handler
         return self._cached_task_done
 
+    def build_dispatch_abandoned(
+        self,
+        final_handler: DispatchAbandonedNext,
+    ) -> DispatchAbandonedNext:
+        """构建 ``on_dispatch_abandoned`` 通知链（带缓存，逐中间件错误隔离后继续）。"""
+        if self._cached_dispatch_abandoned is None:
+            handler = final_handler
+            for mw in reversed(self._middlewares):
+                handler = self._wrap_dispatch_abandoned(mw, handler)
+            self._cached_dispatch_abandoned = handler
+        return self._cached_dispatch_abandoned
+
     @staticmethod
     def _wrap_before(
         middleware: Middleware,
@@ -521,5 +551,26 @@ class MiddlewareChain:
                     middleware.__class__.__name__,
                 )
             await next_handler(record)
+
+        return wrapped
+
+    @staticmethod
+    def _wrap_dispatch_abandoned(
+        middleware: Middleware,
+        next_handler: DispatchAbandonedNext,
+    ) -> DispatchAbandonedNext:
+        """将一个中间件的 on_dispatch_abandoned 包裹在 next_handler 之外（错误隔离，链路继续）。"""
+
+        async def wrapped(
+            event: Event,
+        ) -> None:
+            try:
+                await middleware.on_dispatch_abandoned(event)
+            except Exception:
+                logger.exception(
+                    'Middleware %s on_dispatch_abandoned failed',
+                    middleware.__class__.__name__,
+                )
+            await next_handler(event)
 
         return wrapped
