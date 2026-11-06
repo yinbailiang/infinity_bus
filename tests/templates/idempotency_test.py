@@ -315,7 +315,7 @@ async def test_inmemory_recorder_ttl_expires() -> None:
     """TTL：过期记录在读写路径上被惰性清理。"""
     r = InMemoryIdempotencyRecorder(ttl_seconds=0.05)
     assert await r.claim('c', 'e1') is True
-    await asyncio.sleep(0.06)
+    await asyncio.sleep(0.2)  # Windows 事件循环时钟分辨率约 15.6ms，留足余量避免 flaky
 
     assert await r.is_processed('c', 'e1') is False
     assert await r.claim('c', 'e1') is True, '过期后重投应能重新认领'
