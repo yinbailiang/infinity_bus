@@ -63,6 +63,15 @@ class EventQueue(ABC):
         消息。这是唯一语义：不提供按取出顺序结清的兼容路径。
         """
 
+    def task_abandoned(self, event: Event) -> None:
+        """事件未能完整派发（仍有处理器任务未启动）时由总线调用：停止等待该事件。
+
+        默认实现按「已结清」处理（等价于 ``task_done(event)``）：进程内队列没有
+        重投能力，保留未结清计数只会让后续 ``join`` 永久等待。具备重投能力的实现
+        应覆写此方法：从本地追踪移除，但**不 ack**，让消息在通道关闭时由 broker 重投。
+        """
+        self.task_done(event)
+
     @abstractmethod
     def qsize(self) -> int:
         """返回当前待处理事件数。"""

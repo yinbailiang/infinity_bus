@@ -117,6 +117,20 @@ async def test_task_done_unknown_event_keeps_queue_intact() -> None:
     assert [event.id for _, event in q._unacked] == [ev.id]
 
 
+async def test_task_abandoned_drops_tracking_without_ack() -> None:
+    """未完整派发：移出本地追踪但不 ack（等 broker 重投）。"""
+    q, _, _, _, _ = _make_q()
+    msg: Any = AsyncMock()
+    ev = _payload_event()
+    q._unacked.append((msg, ev))
+
+    q.task_abandoned(ev)
+    await asyncio.sleep(0)
+
+    msg.ack.assert_not_awaited()
+    assert q._unacked == []
+
+
 async def test_task_done_empty_is_noop() -> None:
     """unacked 为空时 task_done 无副作用。"""
     q, _, _, _, _ = _make_q()

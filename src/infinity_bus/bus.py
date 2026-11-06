@@ -410,7 +410,7 @@ class EventBus:
                     pass
 
             await self._wait_all_tasks_done()  # 等待所有处理器任务完成
-            self._clear_fences()  # 未启动任务的事件不 ack：留给 broker 重投
+            self._clear_fences()  # 未完整派发的事件：内存队列结清计数，持久队列等重投
 
             self._running.clear()
             failures = await self._handlers.deactivate()
@@ -622,7 +622,17 @@ class EventBus:
         self._queue.task_done(event)
 
     def _clear_fences(self) -> None:
-        """丢弃未打开的闸门（停机收尾）：未 ack 的消息留给 broker 重投。"""
+        """丢弃未打开的闸门（停机收尾）。
+
+        未打开 = 仍有处理器任务没开始执行 = 事件没有完整派发。逐个通知队列停止等待
+        该事件：进程内队列结清计数（无重投能力），持久队列保持未 ack（由 broker
+        在通道关闭时重投）。
+        """
+        for fence in self._pending_fences:
+            try:
+                self._queue.task_abandoned(fence.event)
+            except Exception:
+                logger.exception('Failed to abandon event %s during shutdown', fence.event.id)
         self._pending_fences.clear()
 
     async def _wait_all_tasks_done(self) -> None:

@@ -22,6 +22,7 @@ class EventQueue(ABC):
     async def put(self, event: Event) -> None   # 入队；满则阻塞（背压）
     async def get(self) -> Event                # 取出队首；空则阻塞
     def task_done(self, event: Event) -> None   # 标记一个事件已派发完成
+    def task_abandoned(self, event: Event) -> None  # 事件未完整派发：停止等待
     def qsize(self) -> int                      # 当前待处理事件数
     async def join(self) -> None                # 等待事件全部派发
 ```
@@ -31,6 +32,7 @@ class EventQueue(ABC):
 | `put(event)` | 发布端入队。队列已满时阻塞直至有空位，形成背压。 |
 | `get()` | 分发端取件。队列为空时阻塞直至有事件到达。 |
 | `task_done(event)` | 该事件的所有处理器任务**都获得执行权之后**调用一次，供 `join()` 排空判定；`event` 让跨进程实现按身份定位消息（并发启动顺序可能与取出顺序不同）。 |
+| `task_abandoned(event)` | 停机时事件未能完整派发（仍有处理器任务未启动）时调用：通知队列停止等待。默认实现等价于 `task_done(event)`（进程内队列结清计数）；具备重投能力的实现应覆写为「移出本地追踪但不 ack」，让 broker 在通道关闭时重投。 |
 | `qsize()` | 积压深度，供可观测性与停机派发等待超时估算。 |
 | `join()` | 阻塞直至所有已入队事件均被取出并完成 `task_done(event)`（事件已完整派发；优雅停机不丢事件的关键）。 |
 
@@ -144,9 +146,11 @@ bus = EventBus(reg, hreg, queue=PriorityEventQueue())
 
 - `EventQueue` 的协议刻意**最小化**：仅覆盖总线派发所需的 5 个方法；`empty/full/put_nowait`
   等非总线所需方法不进入抽象，具体实现可按需自行扩展。
-- 自定义队列实现者需保证 `task_done(event)` 与 `join` 的计数语义（每取出一次须对应一次
-  `task_done(event)`），否则停机排空可能永久阻塞。`task_done(event)` 是唯一协议：多个事件的
-  处理器并发启动时，启动顺序与取出顺序不同，必须按 `event.id` 定位才能 ack 正确的那条消息；
-  不接受事件身份的实现视为不符合协议。
+- 自定义队列实现者需保证 `task_done(event)` / `task_abandoned(event)` 与 `join` 的计数语义
+  （每取出一次须对应一次结清），否则停机排空可能永久阻塞。`task_done(event)` 是唯一 ack 协议：
+  多个事件的处理器并发启动时，启动顺序与取出顺序不同，必须按 `event.id` 定位才能 ack 正确的那条
+  消息；不接受事件身份的实现视为不符合协议。
+- 停机时未完整派发的事件会收到 `task_abandoned(event)`：默认实现结清 `join` 计数（无重投能力），
+  持久队列覆写后保持未 ack（由 broker 重投）。
 - 若需与旧版 `max_queue_size` 等价的容量控制，请注入
   `InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=N))`。

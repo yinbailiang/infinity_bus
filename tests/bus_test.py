@@ -1429,6 +1429,7 @@ class _AckRecordingQueue(EventQueue):
         self._inner = InMemoryEventQueue()
         self.published: List[Event] = []
         self.acked: List[Event] = []
+        self.abandoned: List[Event] = []
 
     @property
     def unfinished(self) -> int:
@@ -1437,6 +1438,10 @@ class _AckRecordingQueue(EventQueue):
     def acked_ids(self, name: str) -> List[str]:
         """某个事件名下已 ack 的事件 id（顺序即 ack 顺序）。"""
         return [event.id for event in self.acked if event.name == name]
+
+    def abandoned_ids(self, name: str) -> List[str]:
+        """某个事件名下「未完整派发、停止等待」的事件 id。"""
+        return [event.id for event in self.abandoned if event.name == name]
 
     async def put(self, event: Event) -> None:
         self.published.append(event)
@@ -1448,6 +1453,10 @@ class _AckRecordingQueue(EventQueue):
     def task_done(self, event: Event) -> None:
         self.acked.append(event)
         self._inner.task_done(event)
+
+    def task_abandoned(self, event: Event) -> None:
+        self.abandoned.append(event)
+        self._inner.task_done(event)  # 内存队列无重投能力：结清计数，但不记为 ack
 
     def qsize(self) -> int:
         return self._inner.qsize()
@@ -1648,7 +1657,9 @@ async def test_handler_never_started_leaves_event_unacked(
         await bus.stop()
 
     assert queue.acked_ids('test.slow') == [], '还有处理器从未启动，不能 ack'
-    assert queue.unfinished == 1, '未 ack 的事件要留在队列计数里（等重投）'
+    assert queue.abandoned_ids('test.slow') == [queue.published[0].id], '要通知队列停止等待该事件'
+    assert queue.unfinished == 0, '内存队列没有重投能力：放弃的事件必须结清计数'
+    await asyncio.wait_for(queue.join(), timeout=1.0)  # 后续 join 不会永久等待
     assert bus.pending_ack_count == 0, '未打开的闸门由停机清理'
 
 

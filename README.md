@@ -155,7 +155,9 @@ the ack, so normal operations (shutdown, a slow downstream) don't turn into rede
 storms. Failures are still reported through `TaskErrorEvent`; retry policy stays with the
 consumer (idempotency template / middleware / compensation). `EventQueue.task_done(event)`
 must carry the event identity so concurrent starts ack the right message (there is no
-fetch-order fallback). New observability property: `EventBus.pending_ack_count`.
+fetch-order fallback). On shutdown, events that were never fully dispatched are reported
+through `task_abandoned(event)`: in-process queues release the count, persistent queues stay
+unacked for broker redelivery. New observability property: `EventBus.pending_ack_count`.
 
 ## 🚀 Quick Start
 

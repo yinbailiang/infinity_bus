@@ -185,6 +185,15 @@ class RabbitFanoutQueue(EventQueue):
         # 保持未确认状态，交由 broker 在通道关闭时重投。
         logger.warning('task_done(event=%s) 找不到对应消息，保持未确认', event.id)
 
+    def task_abandoned(self, event: Event) -> None:
+        """事件未完整派发：移出本地未确认列表，但**不 ack**（等 broker 重投）。"""
+        for position, (_, queued) in enumerate(self._unacked):
+            if queued.id == event.id:
+                message, _ = self._unacked.pop(position)
+                logger.debug('事件未完整派发，消息保持未确认（等 broker 重投）：%s', message)
+                return
+        logger.warning('task_abandoned(event=%s) 找不到对应消息，忽略', event.id)
+
     async def _ack(self, message: Any) -> None:
         """异步发送 basic_ack（失败静默，交由 broker 超时/重投兜底）。"""
         try:

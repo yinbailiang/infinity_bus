@@ -151,7 +151,8 @@ v6 新增（非破坏性）：中间件任务管道钩子（`before_dispatch` / 
 正常的运维动作（停机、下游变慢）不会演变成重投风暴。失败仍由 `TaskErrorEvent` 上报，
 重试策略留给使用方（幂等模板 / 中间件 / 应用层补偿）。`EventQueue.task_done(event)` 必须携带
 事件身份，并发启动时才能 ack 正确的消息（不提供按取出顺序结清的兼容路径）。
-新增可观测属性 `EventBus.pending_ack_count`（尚未确认的事件数）。
+停机时未完整派发的事件会通过 `task_abandoned(event)` 通知队列：进程内队列结清计数，持久队列
+保持未确认（等 broker 重投）。新增可观测属性 `EventBus.pending_ack_count`（尚未确认的事件数）。
 
 ## 🚀 快速开始
 
