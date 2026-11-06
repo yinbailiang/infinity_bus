@@ -159,6 +159,14 @@ fetch-order fallback). On shutdown, events that were never fully dispatched are 
 through `task_abandoned(event)`: in-process queues release the count, persistent queues stay
 unacked for broker redelivery. New observability property: `EventBus.pending_ack_count`.
 
+New in v6.2: **claims now close the loop with dispatch** — `Middleware.on_dispatch_abandoned(event)`
+fires when shutdown leaves an event not fully dispatched, so dedup / claiming middlewares can
+withdraw the claim written in `before_dispatch` (otherwise redelivery would be blocked by
+their own dedup). `IdempotencyRecorder` gained atomic `claim()` / `release()`;
+`InMemoryIdempotencyRecorder` is bounded by default (100k entries, FIFO, optional TTL);
+`SqliteIdempotencyRecorder` uses WAL, prunes by retention, and indexes `ts`;
+`RabbitFanoutQueue` exposes `drain_timeout` and runtime `strategy` / `set_strategy()`.
+
 ## 🚀 Quick Start
 
 ### Basic Pub/Sub

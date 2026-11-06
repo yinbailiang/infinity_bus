@@ -154,6 +154,13 @@ v6 新增（非破坏性）：中间件任务管道钩子（`before_dispatch` / 
 停机时未完整派发的事件会通过 `task_abandoned(event)` 通知队列：进程内队列结清计数，持久队列
 保持未确认（等 broker 重投）。新增可观测属性 `EventBus.pending_ack_count`（尚未确认的事件数）。
 
+**v6.2：补齐「认领 ⇔ 派发」闭环，并加固幂等与 Rabbit 运维属性** —— 新增中间件
+`on_dispatch_abandoned(event)`：停机时事件未完整派发会通知中间件撤回 `before_dispatch`
+写下的认领，避免重投被自己的去重挡住。`IdempotencyRecorder` 新增原子 `claim()` 与
+`release()`；`InMemoryIdempotencyRecorder` 默认有界（100k 条 FIFO，可选 TTL）；
+`SqliteIdempotencyRecorder` 开启 WAL、按保留期清理并给 `ts` 加索引；
+`RabbitFanoutQueue` 新增 `drain_timeout` 与运行期 `strategy` / `set_strategy()`。
+
 ## 🚀 快速开始
 
 ### 基础发布/订阅
