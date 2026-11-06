@@ -1,11 +1,12 @@
 # Commit Log — `infinity_bus`
 
-> 共 **147** 个提交 · 26 个版本标签 · 2026-06-07 ~ 2026-10-12
+> 共 **152** 个提交 · 27 个版本标签 · 2026-06-07 ~ 2026-11-06
 
 ## 版本标签
 
 | Tag | Commit |
 | --- | ------ |
+| `v6.1.0` | `3d15097` |
 | `v6.0.0` | `0e297c6` |
 | `v5.0.0` | `ecdcc09` |
 | `v4.1.0` | `7f0ddb7` |
@@ -36,6 +37,21 @@
 ---
 
 ## 全部提交
+
+### 2026-11-06
+
+- **`3d15097`** `Merge pull request #1 from yinbailiang/feat/ack-on-start-fence`
+  - v6.1.0: ack 语义改为「事件的所有 handler 任务都开始执行后确认一次」（dispatch guarantee）；`EventQueue.task_done(event)` 成为唯一协议，新增 `task_abandoned` / `pending_ack_count`
+
+- **`df66885`** `fix(bus): release aborted dispatch counts on shutdown`
+  - 停机时未完整派发的事件通过 `task_abandoned(event)` 停止等待：进程内队列结清计数，持久队列保持未 ack 等 broker 重投
+
+- **`6afb152`** `feat(bus): ack on handler start via per-dispatch fence`
+  - `_DispatchFence` 启动闸门（all-started 才 ack）；失败 / 取消 / 超时不再参与 ack；Rabbit 按 `event.id` 定位消息；移除老 `task_done()` 兼容层
+  - tests: +10 cases；docs (EN/ZH) synced；version 6.1.0
+
+- **`5a83c33`** `chore: sync agent-kit agent rules`
+  - AGENT.md 模板同步（agent-kit 升级）
 
 ### 2026-10-12
 
