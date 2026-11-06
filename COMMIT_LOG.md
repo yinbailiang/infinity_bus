@@ -1,11 +1,12 @@
 # Commit Log — `infinity_bus`
 
-> 共 **152** 个提交 · 27 个版本标签 · 2026-06-07 ~ 2026-11-06
+> 共 **160** 个提交 · 28 个版本标签 · 2026-06-07 ~ 2026-11-06
 
 ## 版本标签
 
 | Tag | Commit |
 | --- | ------ |
+| `v6.2.0` | `e6238fb` |
 | `v6.1.0` | `3d15097` |
 | `v6.0.0` | `0e297c6` |
 | `v5.0.0` | `ecdcc09` |
@@ -39,6 +40,27 @@
 ## 全部提交
 
 ### 2026-11-06
+
+- **`e6238fb`** `chore: bump version to 6.2.0`
+  - Version bumped 6.1.0 -> 6.2.0 (minor: new middleware hook + recorder protocol methods)
+
+- **`dc03cad`** `feat: dispatch-abandoned hook + idempotency/rabbit ops improvements`
+  - Merge PR #3: `on_dispatch_abandoned` middleware hook lets dedup/claiming middlewares withdraw claims when a dispatch is abandoned; atomic `claim()` / `release()`; SQLite WAL + retention pruning + `ts` index; `RabbitFanoutQueue` `drain_timeout` and runtime `strategy`
+
+- **`53dbe88`** `test(templates): stabilize TTL expiry test on Windows`
+  - Enlarge the TTL sleep margin to tolerate the ~15.6ms event-loop clock resolution on Windows
+
+- **`0dd1127`** `docs(templates): clarify event-level claim redelivery semantics`
+  - Claims are event-level: withdrawing after a partial start may re-run handlers that already started (documented in claim/release + middleware hook docs)
+
+- **`33e2c08`** `fix(templates): bound InMemory idempotency recorder growth`
+  - `max_entries` FIFO eviction (default 100k) + optional `ttl_seconds`; SQLite `ts` index for retention pruning
+
+- **`b99f153`** `feat(templates): atomic claim, sqlite retention, rabbit drain/strategy`
+  - `IdempotencyRecorder.claim()/release()`, SQLite WAL + retention + `prune()`, Rabbit `drain_timeout` + `strategy` property / `set_strategy()`
+
+- **`4ce84ef`** `feat(middleware): add on_dispatch_abandoned hook`
+  - Middleware notification chain for events whose dispatch was abandoned during shutdown
 
 - **`3d15097`** `Merge pull request #1 from yinbailiang/feat/ack-on-start-fence`
   - v6.1.0: ack 语义改为「事件的所有 handler 任务都开始执行后确认一次」（dispatch guarantee）；`EventQueue.task_done(event)` 成为唯一协议，新增 `task_abandoned` / `pending_ack_count`
