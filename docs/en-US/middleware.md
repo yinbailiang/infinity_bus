@@ -173,6 +173,8 @@ Dispatch-**abandoned** hook (notification, optional) — fires during shutdown t
 
 Unlike `on_task_done`'s `cancelled` / `skipped`, this means the event was **never fully handed to the handlers** — not that a handler failed. Dedup / claiming middlewares should withdraw the claim they wrote in `before_dispatch`; otherwise a redelivered event will be blocked by their own dedup logic and end up "never executed and never re-executed". Hook errors are isolated per middleware and never affect shutdown.
 
+> **Event-level notification**: it fires whenever any task of the event never started. If some handlers already started, they may run again after redelivery (claims do not distinguish handlers) — make side effects idempotent or dedup per handler.
+
 ---
 
 ## MiddlewareChain

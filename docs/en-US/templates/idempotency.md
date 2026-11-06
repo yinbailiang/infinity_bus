@@ -101,6 +101,13 @@ class DedupMiddleware(Middleware):
 > with the `on_dispatch_abandoned` middleware hook so that "claimed ⇔ actually handed
 > to the handlers".
 
+> **Claims are event-level**: `claim(consumer, event.id)` does not distinguish handlers.
+> If only some handlers have started when shutdown abandons the dispatch,
+> `on_dispatch_abandoned` withdraws the claim for the whole event; after redelivery,
+> **handlers that already started may run again**. The pattern guarantees "a not-fully-
+> dispatched event can be retried", not "started handlers never re-run" — make side
+> effects idempotent, or dedup per handler (e.g. include the handler id in `consumer`).
+
 > The in-process recorder is **bounded**: once `max_entries` (default 100000, 0 = unbounded)
 > is exceeded, the oldest entries are evicted in insertion order; `ttl_seconds` (default 0)
 > can expire records. Evicted / expired records lose their dedup protection, so a duplicate

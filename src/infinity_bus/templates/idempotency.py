@@ -39,11 +39,20 @@ class IdempotencyRecorder(Protocol):
         去重认领。它与 :class:`IdempotentHandler` 的「成功后标记」语义不同：``claim``
         是处理前记账，失败不会自动撤回（停机放弃派发时应由中间件
         ``on_dispatch_abandoned`` 调用 :meth:`release` 撤回）。
+
+        **认领是事件级的**：不区分 handler。若停机时事件只有部分处理器已启动，整个
+        认领会被撤回，重投后已启动的处理器也可能再次执行 —— 该模式保证「未完整派发
+        的事件可以重试」，不保证「已启动的处理器不重复执行」；副作用需幂等，或按
+        处理器维度去重（例如在 ``consumer`` 中带上 handler id）。
         """
         ...
 
     async def release(self, consumer: str, event_id: str) -> None:
-        """撤回认领：删除已处理标记，让重投的事件可以重新派发（幂等空操作安全）。"""
+        """撤回认领：删除已处理标记，让重投的事件可以重新派发（幂等空操作安全）。
+
+        事件级的撤回：若事件只有部分处理器启动就被放弃，重投后已启动的处理器也会
+        再次执行（见 :meth:`claim` 的说明）。
+        """
         ...
 
 

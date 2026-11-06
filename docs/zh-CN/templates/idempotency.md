@@ -97,6 +97,12 @@ class DedupMiddleware(Middleware):
 > `claim` 是**处理前**记账（失败不会自动撤回）；`release` 与中间件
 > `on_dispatch_abandoned` 配合，保证「认领 ⇔ 真的交给处理器」。
 
+> **认领是事件级的**：`claim(consumer, event.id)` 不区分 handler。若停机时事件只有
+> 部分处理器已启动，`on_dispatch_abandoned` 会撤回整个事件的认领；broker 重投后，
+> **已启动的处理器也可能再次执行**。该模式保证「未完整派发的事件可以重试」，不保证
+> 「已启动的处理器不重复执行」——需要副作用幂等，或按处理器维度去重（例如在
+> `consumer` 中带上 handler id）来兜底。
+
 > 进程内记录器是**有界**的：`max_entries`（默认 100000，0 = 无界）超出后按插入顺序
 > 淘汰最旧记录；`ttl_seconds`（默认 0）可让记录过期。被淘汰 / 过期的记录会失去去重
 > 保护，重复投递可能再次执行——需要强幂等请用 SQLite 版。
