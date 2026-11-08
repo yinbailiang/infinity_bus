@@ -137,6 +137,25 @@ async def test_retention_by_bytes(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_reclaim_bypasses_prune_interval(tmp_path) -> None:
+    """写入失败后的 reclaim 无视 prune_interval 立即回收。"""
+    sink = SQLiteSink(
+        str(tmp_path / 'audit.db'),
+        retention=RetentionPolicy(max_rows=2),
+        prune_interval=3600,
+    )
+    await sink.open()
+    await sink.write([_record(name=f'n{index}') for index in range(2)])
+    await sink.maintain()  # 记录本次维护时间，不删除
+    await sink.write([_record(name=f'm{index}') for index in range(3)])
+    await sink.maintain()  # 未到 prune_interval，跳过
+    assert await _scalar(sink, 'SELECT COUNT(*) FROM event_log') == 5
+    await sink.reclaim()
+    assert await _scalar(sink, 'SELECT COUNT(*) FROM event_log') == 2
+    await sink.close()
+
+
+@pytest.mark.asyncio
 async def test_extra_columns_are_populated(tmp_path) -> None:
     """extra_columns 的值从 record.extra 按列名写入。"""
     sink = SQLiteSink(str(tmp_path / 'audit.db'), extra_columns=['trace_id TEXT'])

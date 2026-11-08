@@ -31,8 +31,10 @@ class RecordingSink(AuditSink):
         self.open_calls = 0
         self.close_calls = 0
         self.maintain_calls = 0
+        self.reclaim_calls = 0
         self.fail_open = False
         self.fail_maintain = False
+        self.fail_reclaim = False
         self.fail_write = 0
 
     @property
@@ -57,6 +59,11 @@ class RecordingSink(AuditSink):
         self.maintain_calls += 1
         if self.fail_maintain:
             raise OSError('maintain failed')
+
+    async def reclaim(self) -> None:
+        self.reclaim_calls += 1
+        if self.fail_reclaim:
+            raise OSError('reclaim failed')
 
     async def close(self) -> None:
         self.close_calls += 1
@@ -214,6 +221,7 @@ async def test_write_failure_falls_back_and_recovers(
         assert middleware.degraded
         assert middleware.write_error_count == 1
         assert middleware.fallback_count == 1
+        assert sink.reclaim_calls == 1
 
         await asyncio.sleep(0.02)
         await event_bus.proxy('src').publish('mw.ping', {'key': 'k', 'count': 2})
@@ -252,6 +260,43 @@ async def test_open_failure_degrades_then_recovers(
         await middleware.flush()
         assert not middleware.degraded
         assert len([record for record in sink.records if record.name == 'mw.ping']) == 1
+
+
+@pytest.mark.asyncio
+async def test_reclaim_failure_still_degrades(
+    base_event_registry: EventRegistry,
+    handler_registry: EventHandlerRegistry,
+) -> None:
+    """强制回收失败不影响降级与 fallback。"""
+    sink = RecordingSink()
+    sink.fail_write = 1
+    sink.fail_reclaim = True
+    middleware = AuditMiddleware(sink, flush_interval=0)
+    chain = MiddlewareChain()
+    await chain.add(middleware)
+    event_bus = EventBus(
+        base_event_registry,
+        handler_registry,
+        queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+        middleware_chain=chain,
+    )
+    async with event_bus:
+        await event_bus.proxy('src').publish('mw.ping', {'key': 'k', 'count': 1})
+        await middleware.flush()
+        assert middleware.degraded
+        assert middleware.fallback_count == 1
+        assert sink.reclaim_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_periodic_maintenance_runs_without_events(bus: EventBus) -> None:
+    """没有事件时也按 maintenance_interval 执行清理。"""
+    sink = RecordingSink()
+    middleware = AuditMiddleware(sink, maintenance_interval=0.01)
+    await middleware.on_setup(bus)
+    await asyncio.sleep(0.05)
+    assert sink.maintain_calls >= 1
+    await middleware.on_teardown(bus)
 
 
 @pytest.mark.asyncio
@@ -313,6 +358,8 @@ def test_invalid_parameters() -> None:
         AuditMiddleware(sink, reconnect_backoff=1, reconnect_backoff_max=0.5)
     with pytest.raises(ValueError, match='close_timeout'):
         AuditMiddleware(sink, close_timeout=0)
+    with pytest.raises(ValueError, match='maintenance_interval'):
+        AuditMiddleware(sink, maintenance_interval=0)
     with pytest.raises(ValueError, match='重名'):
         AuditMiddleware(sink, extra_fields={'data': 'x'})
 

@@ -77,6 +77,7 @@ await chain.add(AuditMiddleware(JSONLSink('events.jsonl')))
 | `reconnect_backoff` | `1.0` | 首次重连退避（秒），之后指数增长 |
 | `reconnect_backoff_max` | `30.0` | 退避上限（秒） |
 | `close_timeout` | `5.0` | 停机排空队列的超时（秒） |
+| `maintenance_interval` | `60.0` | 独立周期维护间隔（秒）；`None` 关闭。即使没有事件也会触发保留策略 |
 
 ### 观测
 
@@ -94,11 +95,14 @@ await chain.add(AuditMiddleware(JSONLSink('events.jsonl')))
 
 1. `on_setup` 打开 Sink 失败（依赖缺失除外）不会阻断总线启动：进入降级模式，
    队列中的记录走 `fallback`，并按指数退避重连。
-2. 写入失败：本批记录走 `fallback`，关闭 Sink，进入退避；到点后重新 `open()`，
-   成功即自动恢复写入。
-3. Sink 的 `maintain()` 失败只记录日志，不影响后续写入。
-4. 停机时先排空队列（`close_timeout`），再关闭 Sink；`on_teardown` 可重复调用。
-5. `aiosqlite` / `aiofiles` 未安装时，对应的 Sink 在 `open()` 阶段抛出 `ImportError`
+2. 写入失败：先调用 `sink.reclaim()` 强制回收空间（忽略保留策略的内部限频），
+   再关闭 Sink、进入退避；到点后重新 `open()`，成功即自动恢复写入。
+3. 保留策略由独立维护任务按 `maintenance_interval` 周期执行，不依赖事件写入；
+   服务空闲或持续写失败时仍会清理。
+4. Sink 的 `maintain()` 失败只记录日志，不影响后续写入。
+5. 停机时先停止维护任务，再排空队列（`close_timeout`）并关闭 Sink；`on_teardown`
+   可重复调用。
+6. `aiosqlite` / `aiofiles` 未安装时，对应的 Sink 在 `open()` 阶段抛出 `ImportError`
    并由总线启动流程上报（不会被静默降级）。
 
 ## 审计记录
@@ -213,6 +217,10 @@ CREATE INDEX IF NOT EXISTS idx_event_log_ts ON event_log(ts);
 空洞下越删越多。删除后调用 `PRAGMA incremental_vacuum` 回收空间；旧库首次启用
 `max_bytes` 时会执行一次 `VACUUM`（可用 `vacuum=False` 关闭）。
 
+清理不依赖事件写入：`AuditMiddleware` 的维护任务按 `maintenance_interval` 周期调用
+`sink.maintain()`；写入失败时还会调用 `sink.reclaim()` 跳过 `prune_interval` 立即
+回收，避免磁盘已满导致持续失败。
+
 ## 自定义 Sink
 
 ```python
@@ -237,8 +245,10 @@ class PrintSink(AuditSink):
         pass
 ```
 
-自定义 Sink 只需实现 `open / write / close` 与 `is_open`；重连、退避、队列、
-降级与保留策略调度由 `AuditMiddleware` 统一处理。可选实现 `maintain()` 做周期性维护。
+自定义 Sink 只需实现 `open / write / close` 与 `is_open`；重连、退避、队列与降级由
+`AuditMiddleware` 统一处理。可选实现 `maintain()` 做周期性维护，以及 `reclaim()`
+在写入失败后执行一次跳过限频的强制空间回收。中间件会串行调用 Sink 方法
+（写入与维护不会并发），实现无需额外加锁。
 
 ## 从旧版迁移
 

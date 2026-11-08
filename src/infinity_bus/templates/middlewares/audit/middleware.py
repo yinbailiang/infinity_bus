@@ -79,6 +79,7 @@ class AuditMiddleware(Middleware):
         reconnect_backoff: float = 1.0,
         reconnect_backoff_max: float = 30.0,
         close_timeout: float = 5.0,
+        maintenance_interval: float | None = 60.0,
     ) -> None:
         if batch_size < 1:
             raise ValueError('batch_size 必须为正整数')
@@ -94,6 +95,8 @@ class AuditMiddleware(Middleware):
             raise ValueError('reconnect_backoff_max 不能小于 reconnect_backoff')
         if close_timeout <= 0:
             raise ValueError('close_timeout 必须为正数')
+        if maintenance_interval is not None and maintenance_interval <= 0:
+            raise ValueError('maintenance_interval 必须为正数或 None')
         extra = dict(extra_fields or {})
         validate_extra_fields(extra)
 
@@ -108,9 +111,12 @@ class AuditMiddleware(Middleware):
         self._reconnect_backoff = reconnect_backoff
         self._reconnect_backoff_max = reconnect_backoff_max
         self._close_timeout = close_timeout
+        self._maintenance_interval = maintenance_interval
 
         self._queue: asyncio.Queue[_QueueItem] = asyncio.Queue(maxsize=queue_maxsize)
+        self._sink_lock = asyncio.Lock()
         self._writer_task: asyncio.Task[None] | None = None
+        self._maintenance_task: asyncio.Task[None] | None = None
         self._closing = False
         self._degraded = False
         self._next_retry_at = 0.0
@@ -128,7 +134,8 @@ class AuditMiddleware(Middleware):
         """打开 Sink 并启动后台写入任务；打开失败时降级并等待重连。"""
         self._closing = False
         try:
-            await self._sink.open()
+            async with self._sink_lock:
+                await self._sink.open()
         except ImportError:
             raise
         except Exception:
@@ -141,10 +148,22 @@ class AuditMiddleware(Middleware):
             self._backoff = self._reconnect_backoff
         if self._writer_task is None or self._writer_task.done():
             self._writer_task = asyncio.create_task(self._writer_loop())
+        if self._maintenance_interval is not None and (self._maintenance_task is None or self._maintenance_task.done()):
+            self._maintenance_task = asyncio.create_task(self._maintenance_loop())
 
     async def on_teardown(self, bus: EventBus) -> None:
         """排空队列并关闭 Sink；可重复调用。"""
         self._closing = True
+        maintenance = self._maintenance_task
+        self._maintenance_task = None
+        if maintenance is not None and not maintenance.done():
+            maintenance.cancel()
+            try:
+                await maintenance
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception('审计维护任务异常退出')
         task = self._writer_task
         self._writer_task = None
         if task is not None and not task.done():
@@ -168,7 +187,8 @@ class AuditMiddleware(Middleware):
             except Exception:
                 logger.exception('审计写入任务异常退出')
         try:
-            await self._sink.close()
+            async with self._sink_lock:
+                await self._sink.close()
         except Exception:
             logger.exception('关闭审计 Sink 失败')
 
@@ -292,6 +312,21 @@ class AuditMiddleware(Middleware):
             if stop:
                 return
 
+    async def _maintenance_loop(self) -> None:
+        """与写入解耦的周期维护：即使没有事件或写入持续失败也会运行。"""
+        interval = self._maintenance_interval
+        if interval is None:
+            return
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                async with self._sink_lock:
+                    await self._sink.maintain()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception('审计 Sink 定期维护失败')
+
     async def _collect(self, batch: list[_Pending]) -> bool:
         """在 ``flush_interval`` 内把队列中的条目并入当前批次。"""
         deadline = asyncio.get_running_loop().time() + self._flush_interval
@@ -323,7 +358,8 @@ class AuditMiddleware(Middleware):
                 self._fallback_records(records)
                 return
             try:
-                await self._sink.open()
+                async with self._sink_lock:
+                    await self._sink.open()
             except Exception:
                 logger.warning('审计 Sink 重连失败，继续退避', exc_info=True)
                 self._schedule_retry()
@@ -334,12 +370,19 @@ class AuditMiddleware(Middleware):
             self._next_retry_at = 0.0
             logger.info('审计 Sink 已恢复: %s', type(self._sink).__name__)
         try:
-            await self._sink.write(records)
+            async with self._sink_lock:
+                await self._sink.write(records)
         except Exception:
             self._write_error_count += 1
-            logger.exception('审计 Sink 写入失败，降级本批 %d 条记录', len(records))
+            logger.exception('审计 Sink 写入失败，尝试强制回收空间后降级本批 %d 条记录', len(records))
             try:
-                await self._sink.close()
+                async with self._sink_lock:
+                    await self._sink.reclaim()
+            except Exception:
+                logger.exception('写入失败后回收审计 Sink 空间失败')
+            try:
+                async with self._sink_lock:
+                    await self._sink.close()
             except Exception:
                 logger.exception('写入失败后关闭审计 Sink 失败')
             self._degraded = True
@@ -349,7 +392,8 @@ class AuditMiddleware(Middleware):
         self._written_count += len(records)
         self._backoff = self._reconnect_backoff
         try:
-            await self._sink.maintain()
+            async with self._sink_lock:
+                await self._sink.maintain()
         except Exception:
             logger.exception('审计 Sink 维护失败')
 

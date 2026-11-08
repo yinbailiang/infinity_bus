@@ -79,6 +79,7 @@ await chain.add(AuditMiddleware(JSONLSink('events.jsonl')))
 | `reconnect_backoff` | `1.0` | Initial reconnect backoff (seconds), exponential afterwards |
 | `reconnect_backoff_max` | `30.0` | Backoff ceiling (seconds) |
 | `close_timeout` | `5.0` | Queue drain timeout during shutdown (seconds) |
+| `maintenance_interval` | `60.0` | Independent maintenance interval (seconds); `None` disables it. Retention runs even without events |
 
 ### Observability
 
@@ -96,12 +97,15 @@ await chain.add(AuditMiddleware(JSONLSink('events.jsonl')))
 
 1. If `on_setup` cannot open the sink (other than a missing dependency), the bus still
    starts; records go to `fallback` and the sink is retried with exponential backoff.
-2. On a write failure, the batch goes to `fallback`, the sink is closed, and a reconnect
-   is scheduled; a successful `open()` restores normal writes.
-3. A `maintain()` failure is logged and never affects subsequent writes.
-4. Shutdown drains the queue (`close_timeout`) before closing the sink; `on_teardown`
-   is idempotent.
-5. Missing `aiosqlite` / `aiofiles` raises `ImportError` from `open()` and fails bus
+2. On a write failure, the middleware calls `sink.reclaim()` first to force space
+   reclamation (bypassing the retention rate limit), then closes the sink and backs off;
+   a successful `open()` restores normal writes.
+3. Retention runs on an independent maintenance task every `maintenance_interval`, not
+   only after writes; idle services and persistent write failures still get cleaned up.
+4. A `maintain()` failure is logged and never affects subsequent writes.
+5. Shutdown stops the maintenance task, drains the queue (`close_timeout`), then closes
+   the sink; `on_teardown` is idempotent.
+6. Missing `aiosqlite` / `aiofiles` raises `ImportError` from `open()` and fails bus
    startup rather than silently degrading.
 
 ## Audit Record
@@ -218,6 +222,10 @@ too much once AUTOINCREMENT leaves gaps. Deletions are followed by
 `PRAGMA incremental_vacuum`; legacy databases run a one-time `VACUUM` when
 `max_bytes` is first enabled (`vacuum=False` opts out).
 
+Cleanup does not depend on event writes: `AuditMiddleware` calls `sink.maintain()` every
+`maintenance_interval`, and on write failure it calls `sink.reclaim()` to bypass
+`prune_interval` and reclaim space immediately, avoiding a permanent disk-full loop.
+
 ## Custom Sink
 
 ```python
@@ -243,8 +251,9 @@ class PrintSink(AuditSink):
 ```
 
 A custom sink implements `open / write / close` and `is_open`; retries, backoff,
-queueing, fallback, and maintenance scheduling stay in `AuditMiddleware`. Override
-`maintain()` for periodic housekeeping.
+queueing, and fallback stay in `AuditMiddleware`. Override `maintain()` for periodic
+housekeeping and `reclaim()` for a forced, rate-limit-free cleanup after write failures.
+The middleware serializes sink calls, so implementations do not need their own lock.
 
 ## Migration from v6
 

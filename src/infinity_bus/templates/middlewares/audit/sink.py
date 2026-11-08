@@ -34,6 +34,13 @@ class AuditSink(ABC):
         """执行周期性维护（保留策略 / 清理）；默认无操作。"""
         pass
 
+    async def reclaim(self) -> None:
+        """立即回收存储空间，调用方期望跳过内部限频；默认无操作。
+
+        写入失败时由中间件调用，用于处理磁盘已满等场景。
+        """
+        pass
+
     @abstractmethod
     async def close(self) -> None:
         """关闭后端并释放资源；必须幂等，关闭后 ``is_open`` 为 ``False``。"""

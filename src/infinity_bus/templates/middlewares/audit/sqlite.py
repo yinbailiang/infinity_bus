@@ -189,6 +189,13 @@ class SQLiteSink(AuditSink):
         self._last_prune_at = now
         await self._prune()
 
+    async def reclaim(self) -> None:
+        """立即执行保留策略，忽略 ``prune_interval``（用于写入失败后的空间回收）。"""
+        if self._retention is None or self._conn is None:
+            return
+        self._last_prune_at = time.monotonic()
+        await self._prune()
+
     async def close(self) -> None:
         """提交并关闭连接。"""
         connection = self._conn
