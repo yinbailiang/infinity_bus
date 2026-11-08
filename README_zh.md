@@ -161,6 +161,16 @@ v6 新增（非破坏性）：中间件任务管道钩子（`before_dispatch` / 
 `SqliteIdempotencyRecorder` 开启 WAL、按保留期清理并给 `ts` 加索引；
 `RabbitFanoutQueue` 新增 `drain_timeout` 与运行期 `strategy` / `set_strategy()`。
 
+**v7.0.0（破坏性）：统一审计日志** —— 移除 `JSONLLoggingMiddleware`、
+`SQLiteLoggingMiddleware` 与 `serialize_data`。新实现由 `AuditMiddleware` + `AuditWriter` +
+`AuditRecordRenderer` 组装，存储后端通过 `AuditSink` 插拔（内置 `JSONLSink` / `SQLiteSink`）。
+后台攒批写入、指数退避重连、三档保留策略、发布失败落库；默认 `digest` 模式只存大小与
+SHA-256。不可渲染负载值替换为 `<0>`、`<1>`… 占位符，真实值存入独立
+`payload_unrenderable` 字段，摘要跨进程稳定；`flush()` 现在返回未完成记录数。迁移方式：
+`JSONLLoggingMiddleware(path)` → `AuditMiddleware(AuditWriter(JSONLSink(path), AuditRecordRenderer()))`；
+`SQLiteLoggingMiddleware(path)` → `AuditMiddleware(AuditWriter(SQLiteSink(path), AuditRecordRenderer()))`。
+全库类型注解统一为 PEP 585/604。
+
 ## 🚀 快速开始
 
 ### 基础发布/订阅

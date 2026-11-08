@@ -168,6 +168,19 @@ their own dedup). `IdempotencyRecorder` gained atomic `claim()` / `release()`;
 `SqliteIdempotencyRecorder` uses WAL, prunes by retention, and indexes `ts`;
 `RabbitFanoutQueue` exposes `drain_timeout` and runtime `strategy` / `set_strategy()`.
 
+**v7.0.0 (breaking): unified audit logging** — `JSONLLoggingMiddleware`,
+`SQLiteLoggingMiddleware`, and `serialize_data` are removed. Build the replacement from
+`AuditMiddleware` + `AuditWriter` + `AuditRecordRenderer` with a pluggable `AuditSink`
+(`JSONLSink` or `SQLiteSink`). The new pipeline batches in the background, retries with
+exponential backoff, keeps three orthogonal retention caps, records publish failures, and
+stores payloads in `digest` mode by default (size + SHA-256). Unrenderable payload values are
+replaced with `<0>`, `<1>`, ... placeholders and kept in a separate `payload_unrenderable`
+field, so digests stay stable across processes; `flush()` now returns the number of
+unfinished records. Migration:
+`JSONLLoggingMiddleware(path)` → `AuditMiddleware(AuditWriter(JSONLSink(path), AuditRecordRenderer()))`;
+`SQLiteLoggingMiddleware(path)` → `AuditMiddleware(AuditWriter(SQLiteSink(path), AuditRecordRenderer()))`.
+Package type annotations are normalized to PEP 585/604.
+
 ## 🚀 Quick Start
 
 ### Basic Pub/Sub
