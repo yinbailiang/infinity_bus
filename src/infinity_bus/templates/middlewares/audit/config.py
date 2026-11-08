@@ -24,7 +24,7 @@ class AuditWriterConfig(BaseModel):
     maintenance_interval: float | None = Field(
         default=60.0,
         gt=0,
-        description='独立周期维护间隔（秒）；None 关闭独立维护任务',
+        description='独立周期维护间隔（秒）；None 关闭维护',
     )
 
     @model_validator(mode='after')

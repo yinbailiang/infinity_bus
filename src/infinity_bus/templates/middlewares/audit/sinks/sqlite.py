@@ -39,7 +39,7 @@ _CORE_COLUMNS: tuple[str, ...] = (
     'error',
 )
 
-_CORE_COLUMN_NAMES = frozenset(_CORE_COLUMNS)
+_CORE_COLUMN_NAMES = frozenset((*_CORE_COLUMNS, 'id'))
 
 _MIGRATION_COLUMNS: dict[str, str] = {
     'ts': 'REAL NOT NULL DEFAULT 0',

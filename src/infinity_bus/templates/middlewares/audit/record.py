@@ -67,7 +67,7 @@ def canonical_payload(data: dict[str, Any] | BaseModel | None) -> str | None:
         return json.dumps(raw, ensure_ascii=False, sort_keys=True, separators=(',', ':'), default=str)
     except (TypeError, ValueError):
         try:
-            return json.dumps(raw, ensure_ascii=False, default=str)
+            return json.dumps(raw, ensure_ascii=False, sort_keys=True, default=str)
         except (TypeError, ValueError):
             return str(raw)
 

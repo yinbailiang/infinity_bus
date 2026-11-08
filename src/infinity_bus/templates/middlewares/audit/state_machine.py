@@ -105,6 +105,14 @@ class AuditStateMachine:
         """重连失败：继续退避。"""
         self._state = self._schedule_retry(self._state)
 
+    def retry_ready(self) -> None:
+        """维护任务重开 Sink 后，让降级状态立即可重试但保留退避值。"""
+        match self._state:
+            case DegradedState(backoff=backoff):
+                self._state = self._state.inherit(DegradedState(next_retry_at=0.0, backoff=backoff))
+            case _:
+                pass
+
     def _schedule_retry(self, state: AuditState) -> DegradedState:
         match state:
             case DegradedState(backoff=backoff):

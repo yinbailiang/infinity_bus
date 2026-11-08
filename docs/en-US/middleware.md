@@ -273,7 +273,7 @@ See [templates/middlewares/](templates/middlewares/middlewares.md) for detailed 
 | `RateLimitMiddleware` | `before_publish` | Sliding-window rate limiting (global or per-event). |
 | `EventTransformMiddleware` | `before_publish` | Transform event name, data fields (rename, redact, inject). |
 | `EventBlockMiddleware` | `before_publish` | Block events matching predicates (allowlist/blocklist). |
-| `EventForwardMiddleware` | `before_publish` | Forward events to another EventBus instance. |
+| `EventForwardMiddleware` | `on_publish` | Forward events to another EventBus instance. |
 | `RecursionGuardMiddleware` | `before_publish` | Prevent infinite event loops (configurable depth). |
 | `MetricsMiddleware` | `before_publish` | Lightweight Prometheus/OTel-style metrics. |
 

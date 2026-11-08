@@ -239,7 +239,7 @@ class MiddlewareChain:
 | `RateLimitMiddleware` | `before_publish` | 滑动窗口速率限制（全局或按事件） |
 | `EventTransformMiddleware` | `before_publish` | 事件名 / 字段转换（重命名、脱敏、注入） |
 | `EventBlockMiddleware` | `before_publish` | 按规则屏蔽事件（白名单 / 黑名单） |
-| `EventForwardMiddleware` | `before_publish` | 跨总线事件转发 |
+| `EventForwardMiddleware` | `on_publish` | 跨总线事件转发 |
 | `RecursionGuardMiddleware` | `before_publish` | 防止无限事件循环（可配置深度） |
 | `MetricsMiddleware` | `before_publish` | 轻量级 Prometheus / OTel 风格指标 |
 

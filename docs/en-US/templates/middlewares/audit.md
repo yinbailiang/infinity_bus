@@ -37,9 +37,10 @@ publish ──on_publish──▶ AuditMiddleware ──enqueue──▶ AuditWr
                                                         retention / prune / vacuum
 ```
 
-> **Mount point**: always mount the middleware on `on_publish` (emission side) for
-> exactly one record per publish. Mounting on `before_dispatch` multiplies records by
-> the fanout member count.
+> **Mount point**: always mount the middleware on `on_publish` (emission side) so each
+> successful publish produces one event record. A failed publish may additionally
+> produce an `ERROR` record. Mounting on `before_dispatch` multiplies records by the
+> fanout member count.
 
 ## Quick Start
 
@@ -119,10 +120,10 @@ belong to `AuditWriterConfig`; payload rendering settings belong to
 | `reconnect_backoff` | `1.0` | Initial reconnect backoff (seconds), exponential afterwards |
 | `reconnect_backoff_max` | `30.0` | Backoff ceiling (seconds); must be >= `reconnect_backoff` |
 | `close_timeout` | `5.0` | Queue drain timeout during shutdown (seconds) |
-| `maintenance_interval` | `60.0` | Independent maintenance interval (seconds); `None` disables the periodic task |
+| `maintenance_interval` | `60.0` | Maintenance interval (seconds); `None` disables maintenance |
 
-> `maintenance_interval=None` only disables the independent maintenance task; each
-> successful write still calls `sink.maintain()` afterwards.
+> `maintenance_interval=None` disables both the periodic task and the per-write
+> `sink.maintain()` call.
 
 ### AuditPayloadConfig Parameters
 
@@ -143,7 +144,8 @@ belong to `AuditWriterConfig`; payload rendering settings belong to
 | `sink` | The underlying `AuditSink` |
 
 Read counters directly from `middleware.state` (`written_count`, `dropped_count`,
-`write_error_count`, `fallback_count`); read queue depth from
+`write_error_count`, `fallback_count`); `dropped_count` includes queue overflow,
+post-shutdown enqueues, shutdown leftovers, and render failures. Read queue depth from
 `middleware.writer.queue_size`. Configuration is accessed through
 `middleware.writer.config` and `middleware.writer.renderer.config`.
 
@@ -211,13 +213,23 @@ Payloads use canonical, key-sorted compact JSON. When the body is stored,
 
 ```python
 class JSONLSink(AuditSink):
-    def __init__(self, file_path: str = 'events.jsonl', *, encoding: str = 'utf-8') -> None
+    def __init__(
+        self,
+        file_path: str = 'events.jsonl',
+        *,
+        encoding: str = 'utf-8',
+        max_bytes: int | None = None,
+        backup_count: int = 3,
+    ) -> None
 ```
 
 - Append-only; one compact JSON object per line, with `extra_fields` flattened.
   Works directly with `tail -f | jq`.
 - Creates the parent directory when needed.
-- File rotation is not implemented; use `SQLiteSink` retention for long-running services.
+- When `max_bytes` is set, the active file rotates to `.1` (then `.2`, ...); at most
+  `backup_count` historical files are kept. `maintain()` rotates a full active file,
+  while `reclaim()` forces rotation on write failure. Both are no-ops when
+  `max_bytes=None`.
 
 ### SQLiteSink
 
@@ -288,13 +300,19 @@ existing rows are preserved and the old `data` column keeps working.
 | Field | Description |
 | - | - |
 | `retention_seconds` | Delete records older than `now - retention_seconds` |
-| `max_rows` | Keep only the newest `max_rows` rows |
+| `max_rows` | Target maximum rows; excess is pruned in `prune_batch` increments |
 | `max_bytes` | Shrink the main database below the target logical size |
 
 `max_rows` uses `ORDER BY id ... OFFSET` instead of `MAX(id) - n`, which would delete
 too much once AUTOINCREMENT leaves gaps. Deletions are followed by
 `PRAGMA incremental_vacuum`; legacy databases run a one-time `VACUUM` when
 `max_bytes` is first enabled (`vacuum=False` opts out).
+
+Pruning is incremental: each sweep removes at most `prune_batch` rows per cap, so a
+large excess may take several maintenance intervals to converge. Legacy rows migrated
+with `ts=0` are immediately eligible for `retention_seconds`. `incremental_vacuum`
+only reclaims space when `auto_vacuum` is enabled; legacy databases enabling
+`max_bytes` perform the one-time `VACUUM` described above.
 
 Cleanup does not depend on event writes: `AuditWriter` calls `sink.maintain()` every
 `maintenance_interval`, and on write failure it calls `sink.reclaim()` to bypass

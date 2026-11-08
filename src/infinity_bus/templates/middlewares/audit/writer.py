@@ -88,23 +88,36 @@ class AuditWriter:
             logger.exception('审计维护任务异常退出')
 
     async def _stop_writer(self) -> None:
-        """发送停止信号、排空队列并取消写入任务。"""
+        """发送停止信号、排空队列、取消写入任务并清理残留条目。"""
         task = self._writer_task
         self._writer_task = None
-        if task is None or task.done():
-            return
-        try:
-            self._queue.put_nowait(STOP)
-        except asyncio.QueueFull:
-            pass
-        await self._drain_queue()
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception('审计写入任务异常退出')
+        if task is not None and not task.done():
+            try:
+                self._queue.put_nowait(STOP)
+            except asyncio.QueueFull:
+                pass
+            await self._drain_queue()
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception('审计写入任务异常退出')
+        self._discard_queue()
+
+    def _discard_queue(self) -> None:
+        """丢弃停机后残留的条目，结清队列计数并清理哨兵。"""
+        while True:
+            try:
+                item = self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            try:
+                if not isinstance(item, StopSentinel):
+                    self._machine.record_dropped()
+            finally:
+                self._queue.task_done()
 
     async def _drain_queue(self) -> None:
         """等待队列排空，超时只记录告警。"""
@@ -220,6 +233,8 @@ class AuditWriter:
                 async with self._sink_lock:
                     if not self._sink.is_open:
                         await self._sink.open()
+                        if isinstance(self._machine.state, DegradedState):
+                            self._machine.retry_ready()
                     await self._sink.maintain()
             except asyncio.CancelledError:
                 raise
@@ -251,8 +266,12 @@ class AuditWriter:
             return
         if not await self._write_batch(records):
             return
+        if isinstance(self._machine.state, DegradedState):
+            self._machine.retry_succeeded()
+            logger.info('审计 Sink 已恢复: %s', type(self._sink).__name__)
         self._machine.record_written(len(records))
-        await self._maintain_sink()
+        if self._config.maintenance_interval is not None:
+            await self._maintain_sink()
 
     def _render_batch(self, batch: Sequence[Pending]) -> list[AuditRecord]:
         """构建本批审计记录；单条失败只丢弃该条。"""
@@ -261,6 +280,7 @@ class AuditWriter:
             try:
                 records.append(self._renderer(item))
             except Exception:
+                self._machine.record_dropped()
                 logger.exception('构建审计记录失败，丢弃该条')
         return records
 
@@ -279,8 +299,7 @@ class AuditWriter:
             self._machine.retry_failed()
             self._fallback_records(records)
             return False
-        self._machine.retry_succeeded()
-        logger.info('审计 Sink 已恢复: %s', type(self._sink).__name__)
+        logger.info('审计 Sink 已重连，等待写入确认: %s', type(self._sink).__name__)
         return True
 
     async def _write_batch(self, records: Sequence[AuditRecord]) -> bool:
@@ -321,6 +340,6 @@ class AuditWriter:
         for record in records:
             self._machine.record_fallback()
             try:
-                self._fallback(json.dumps(record.to_json_dict(), ensure_ascii=False))
+                self._fallback(json.dumps(record.to_json_dict(), ensure_ascii=False, default=str))
             except Exception:
                 logger.exception('审计 fallback 回调失败')

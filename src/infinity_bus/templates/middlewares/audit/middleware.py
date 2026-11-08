@@ -1,5 +1,6 @@
 """审计中间件门面：把发布事件转交 AuditWriter。"""
 
+import copy
 from typing import Any
 
 from pydantic import BaseModel
@@ -57,8 +58,8 @@ class AuditMiddleware(Middleware):
         await next(event_registry, name, source, data, old_event)
 
     async def on_publish(self, event: Event, next: OnPublishNext) -> None:
-        """把已入队事件交给 writer。"""
-        self._writer.enqueue(PendingEvent(event))
+        """快照事件后交给 writer，避免后台渲染读取到后续变更。"""
+        self._writer.enqueue(PendingEvent(event.model_copy(deep=True)))
         await next(event)
 
     async def on_publish_error(
@@ -69,7 +70,14 @@ class AuditMiddleware(Middleware):
         data: dict[str, Any] | BaseModel | None,
     ) -> None:
         """把发布失败也记入审计流。"""
-        self._writer.enqueue(PendingError(error=error, name=name, source=source, data=data))
+        self._writer.enqueue(
+            PendingError(
+                error=error,
+                name=name,
+                source=source,
+                data=copy.deepcopy(data) if data is not None else None,
+            )
+        )
 
     async def flush(self) -> None:
         """等待 writer 队列中的记录全部写入或降级。"""

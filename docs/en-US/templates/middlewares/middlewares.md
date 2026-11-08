@@ -95,7 +95,6 @@ from infinity_bus.templates.middlewares import (
     EventFilter,
     TargetBusProvider,
     make_event_name_filter,
-    make_static_target_provider,
 )
 ```
 

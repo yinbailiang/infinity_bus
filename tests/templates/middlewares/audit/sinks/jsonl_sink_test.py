@@ -85,3 +85,74 @@ async def test_open_and_close_are_idempotent(tmp_path) -> None:
     await sink.close()
     assert not sink.is_open
     assert sink.file_path.endswith('audit.jsonl')
+
+
+@pytest.mark.asyncio
+async def test_non_json_extra_is_stringified(tmp_path) -> None:
+    """不可 JSON 化的 extra 值由 default=str 兜底，不导致写入失败。"""
+    path = str(tmp_path / 'audit.jsonl')
+    sink = JSONLSink(path)
+    await sink.open()
+    await sink.write([_record(extra={'obj': object()})])
+    await sink.close()
+
+    lines = await asyncio.to_thread(_read_lines, path)
+    assert isinstance(json.loads(lines[0])['obj'], str)
+
+
+@pytest.mark.asyncio
+async def test_rotation_by_size_and_backup_count(tmp_path) -> None:
+    """超过 max_bytes 时轮转，并只保留 backup_count 个历史文件。"""
+    path = str(tmp_path / 'audit.jsonl')
+    sink = JSONLSink(path, max_bytes=1, backup_count=1)
+    await sink.open()
+    await sink.write([_record(name='first')])
+    await sink.write([_record(name='second')])
+    await sink.write([_record(name='third')])
+    await sink.close()
+
+    active = await asyncio.to_thread(_read_lines, path)
+    backup = await asyncio.to_thread(_read_lines, f'{path}.1')
+    assert [json.loads(line)['name'] for line in active] == ['third']
+    assert [json.loads(line)['name'] for line in backup] == ['second']
+    assert not (tmp_path / 'audit.jsonl.2').exists()
+
+
+@pytest.mark.asyncio
+async def test_maintain_rotates_full_file(tmp_path) -> None:
+    """maintain 在当前文件达到上限时轮转。"""
+    path = str(tmp_path / 'audit.jsonl')
+    sink = JSONLSink(path, max_bytes=1, backup_count=1)
+    await sink.open()
+    await sink.write([_record(name='first')])
+    await sink.maintain()
+    await sink.close()
+
+    active = await asyncio.to_thread(_read_lines, path)
+    backup = await asyncio.to_thread(_read_lines, f'{path}.1')
+    assert active == []
+    assert [json.loads(line)['name'] for line in backup] == ['first']
+
+
+@pytest.mark.asyncio
+async def test_reclaim_forces_rotation(tmp_path) -> None:
+    """reclaim 跳过大小阈值，强制轮转当前文件。"""
+    path = str(tmp_path / 'audit.jsonl')
+    sink = JSONLSink(path, max_bytes=10_000, backup_count=1)
+    await sink.open()
+    await sink.write([_record(name='first')])
+    await sink.reclaim()
+    await sink.close()
+
+    active = await asyncio.to_thread(_read_lines, path)
+    backup = await asyncio.to_thread(_read_lines, f'{path}.1')
+    assert active == []
+    assert [json.loads(line)['name'] for line in backup] == ['first']
+
+
+def test_invalid_rotation_config() -> None:
+    """非法轮转参数被拒绝。"""
+    with pytest.raises(ValueError, match='max_bytes'):
+        JSONLSink('audit.jsonl', max_bytes=0)
+    with pytest.raises(ValueError, match='backup_count'):
+        JSONLSink('audit.jsonl', backup_count=-1)

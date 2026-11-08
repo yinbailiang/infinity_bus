@@ -105,8 +105,8 @@ uv add infinity_bus
 uv add infinity_bus --extra templates
 ```
 
-> **提示**：高级模板（`expect`、`request`、`pipe`、`AuditMiddleware`）
-> 需要 `[templates]` extra。若未安装而使用这些功能，会收到 `ImportError` 提示。
+> **提示**：高级模板（`expect`、`request`、`pipe`）与内置审计 Sink
+> （`JSONLSink`、`SQLiteSink`）需要 `[templates]` extra。若未安装而使用这些功能，会收到 `ImportError` 提示。
 
 或从源码安装：
 

@@ -160,6 +160,26 @@ async def test_config_controls_payload_mode(bus: EventBus) -> None:
 
 
 @pytest.mark.asyncio
+async def test_event_is_snapshotted_before_background_render(bus: EventBus) -> None:
+    """入队时快照事件，后台渲染不受发布后的对象变更影响。"""
+    sink = RecordingSink()
+    middleware = _middleware(
+        sink,
+        writer_config=AuditWriterConfig(batch_size=10, flush_interval=0.05),
+        payload_config=AuditPayloadConfig(payload_mode='full'),
+    )
+    await middleware.on_setup(bus)
+    event = _event()
+    await middleware.on_publish(event, _noop_next)
+    if isinstance(event.data, MiddlewareTestPayload):
+        event.data.key = 'mutated'
+    await middleware.flush()
+    assert len(sink.records) == 1
+    assert '"key":"k"' in (sink.records[0].data or '')
+    await middleware.on_teardown(bus)
+
+
+@pytest.mark.asyncio
 async def test_publish_error_is_recorded(
     base_event_registry: EventRegistry,
     handler_registry: EventHandlerRegistry,
@@ -356,6 +376,11 @@ async def test_periodic_maintenance_reopens_closed_sink(bus: EventBus) -> None:
     await asyncio.sleep(0.05)
     assert sink.is_open
     assert sink.maintain_calls >= 1
+
+    await middleware.on_publish(_event(), _noop_next)
+    await middleware.flush()
+    assert isinstance(middleware.state, RunningState)
+    assert middleware.state.written_count == 1
     await middleware.on_teardown(bus)
 
 

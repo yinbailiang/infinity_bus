@@ -35,8 +35,9 @@ publish ──on_publish──▶ AuditMiddleware ──enqueue──▶ AuditWr
                                                         retention / prune / vacuum
 ```
 
-> **挂载位置**：必须挂在 `on_publish`（发射侧），每次发布恰好记录一次。
-> 挂到 `before_dispatch` 会按 fanout 成员数重复记录（25 个服务就是 25 倍）。
+> **挂载位置**：必须挂在 `on_publish`（发射侧），成功发布产生一条事件记录；
+> 发布失败会额外产生一条 `ERROR` 记录。挂到 `before_dispatch` 会按 fanout 成员数重复记录
+> （25 个服务就是 25 倍）。
 
 ## 快速开始
 
@@ -116,9 +117,9 @@ Pydantic 模型，构造时一次校验。
 | `reconnect_backoff` | `1.0` | 首次重连退避（秒），之后指数增长 |
 | `reconnect_backoff_max` | `30.0` | 退避上限（秒），不得小于 `reconnect_backoff` |
 | `close_timeout` | `5.0` | 停机排空队列的超时（秒） |
-| `maintenance_interval` | `60.0` | 独立周期维护间隔（秒）；`None` 关闭独立维护任务 |
+| `maintenance_interval` | `60.0` | 维护间隔（秒）；`None` 关闭维护 |
 
-> `maintenance_interval=None` 仅关闭独立维护任务；每批成功写入后仍会调用 `sink.maintain()`。
+> `maintenance_interval=None` 同时关闭独立维护任务与每批写入后的 `sink.maintain()`。
 
 ### AuditPayloadConfig 参数
 
@@ -139,7 +140,8 @@ Pydantic 模型，构造时一次校验。
 | `sink` | 底层 `AuditSink` |
 
 计数直接读取 `middleware.state`（`written_count`、`dropped_count`、
-`write_error_count`、`fallback_count`）；队列长度读取 `middleware.writer.queue_size`。
+`write_error_count`、`fallback_count`）；`dropped_count` 包含队列溢出、停机后入队、
+停机残留与渲染失败。队列长度读取 `middleware.writer.queue_size`。
 配置通过 `middleware.writer.config` 与 `middleware.writer.renderer.config` 访问。
 
 ### 状态机
@@ -201,12 +203,21 @@ Pydantic 模型，构造时一次校验。
 
 ```python
 class JSONLSink(AuditSink):
-    def __init__(self, file_path: str = 'events.jsonl', *, encoding: str = 'utf-8') -> None
+    def __init__(
+        self,
+        file_path: str = 'events.jsonl',
+        *,
+        encoding: str = 'utf-8',
+        max_bytes: int | None = None,
+        backup_count: int = 3,
+    ) -> None
 ```
 
 - 追加写，每条记录一行紧凑 JSON，`extra_fields` 平铺到顶层，可直接 `tail -f | jq`。
 - 父目录不存在时自动创建。
-- 当前不做文件轮转；长期运行建议使用 `SQLiteSink` 的保留策略。
+- 设置 `max_bytes` 后，当前文件会轮转为 `.1`（随后 `.2`...），最多保留
+  `backup_count` 个历史文件。`maintain()` 在当前文件达到上限时轮转，
+  `reclaim()` 在写入失败时强制轮转；`max_bytes=None` 时两者均为空操作。
 
 ### SQLiteSink
 
@@ -277,12 +288,17 @@ CREATE INDEX IF NOT EXISTS idx_event_log_ts ON event_log(ts);
 | 字段 | 说明 |
 | - | - |
 | `retention_seconds` | 删除早于 `now - retention_seconds` 的记录 |
-| `max_rows` | 只保留最新 `max_rows` 行 |
+| `max_rows` | 目标最大行数；超出部分按 `prune_batch` 分批删除 |
 | `max_bytes` | 把主数据库逻辑大小压到目标值以下 |
 
 `max_rows` 使用 `ORDER BY id ... OFFSET`，避免 `MAX(id) - n` 在 AUTOINCREMENT
 空洞下越删越多。删除后调用 `PRAGMA incremental_vacuum` 回收空间；旧库首次启用
 `max_bytes` 时会执行一次 `VACUUM`（可用 `vacuum=False` 关闭）。
+
+清理是增量的：每次 sweep 每个上限最多删除 `prune_batch` 行，超出较多时需要多个维护
+周期才能收敛。迁移时 `ts=0` 的历史行会立即满足 `retention_seconds` 条件。
+`incremental_vacuum` 只在 `auto_vacuum` 已启用时真正回收空间；旧库启用 `max_bytes`
+时会执行上述一次性 `VACUUM`。
 
 清理不依赖事件写入：`AuditWriter` 的维护任务按 `maintenance_interval` 周期调用
 `sink.maintain()`；写入失败时还会调用 `sink.reclaim()` 跳过 `prune_interval` 立即

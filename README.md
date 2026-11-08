@@ -105,8 +105,9 @@ uv add infinity_bus
 uv add infinity_bus --extra templates
 ```
 
-> **Note**: Advanced templates (`expect`, `request`, `pipe`, `AuditMiddleware`)
-> require the `[templates]` extra. Using them without installing the extra will raise an `ImportError`.
+> **Note**: Advanced templates (`expect`, `request`, `pipe`) and the built-in audit sinks
+> (`JSONLSink`, `SQLiteSink`) require the `[templates]` extra. Using them without installing
+> the extra will raise an `ImportError`.
 
 Or install from source:
 

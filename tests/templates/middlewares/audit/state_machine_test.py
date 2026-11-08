@@ -77,6 +77,33 @@ def test_write_failure_records_error_and_degrades() -> None:
     assert isinstance(machine.state, DegradedState)
 
 
+def test_retry_ready_preserves_backoff() -> None:
+    """维护任务重开 Sink 后立即可重试，但不清零退避。"""
+    clock = _Clock()
+    machine = _machine(clock)
+    machine.setup_failed()
+    assert isinstance(machine.state, DegradedState)
+    assert machine.state.backoff == 2.0
+
+    machine.retry_ready()
+    assert isinstance(machine.state, DegradedState)
+    assert machine.state.next_retry_at == 0.0
+    assert machine.state.backoff == 2.0
+    assert machine.retry_due()
+
+    machine.write_failed()
+    assert isinstance(machine.state, DegradedState)
+    assert machine.state.next_retry_at == 2.0
+    assert machine.state.backoff == 4.0
+
+
+def test_retry_ready_is_noop_when_running() -> None:
+    """非降级状态下 retry_ready 不改变状态。"""
+    machine = _machine()
+    machine.retry_ready()
+    assert isinstance(machine.state, RunningState)
+
+
 def test_teardown_states_reject_records() -> None:
     """停机状态拒绝新记录，写入任务仅在队列空时退出。"""
     machine = _machine()

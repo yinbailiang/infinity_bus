@@ -213,6 +213,8 @@ def test_invalid_configuration() -> None:
         SQLiteSink(':memory:', extra_columns=['trace_id TEXT', 'trace_id TEXT'])
     with pytest.raises(ValueError, match='重名'):
         SQLiteSink(':memory:', extra_columns=['data TEXT'])
+    with pytest.raises(ValueError, match='重名'):
+        SQLiteSink(':memory:', extra_columns=['id TEXT'])
     with pytest.raises(ValueError, match='prune_interval'):
         SQLiteSink(':memory:', prune_interval=-1)
     with pytest.raises(ValueError, match='prune_batch'):
