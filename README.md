@@ -181,6 +181,12 @@ unfinished records. Migration:
 `SQLiteLoggingMiddleware(path)` → `AuditMiddleware(AuditWriter(SQLiteSink(path), AuditRecordRenderer()))`.
 Package type annotations are normalized to PEP 585/604.
 
+**v7.0.1**: lifecycle hardening — `stop()` is now best-effort and cancellation-safe
+(publish gate, handler binding, and middleware teardown all complete on cancellation),
+`start()` rolls back on cancellation so it can be retried, `@handler` resolves PEP 563
+annotations (including locally defined payload classes), OpenTelemetry observable gauges
+return iterable observations, and `Event.model_dump()` preserves concrete payload fields.
+
 ## 🚀 Quick Start
 
 ### Basic Pub/Sub

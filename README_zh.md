@@ -171,6 +171,11 @@ SHA-256。不可渲染负载值替换为 `<0>`、`<1>`… 占位符，真实值�
 `SQLiteLoggingMiddleware(path)` → `AuditMiddleware(AuditWriter(SQLiteSink(path), AuditRecordRenderer()))`。
 全库类型注解统一为 PEP 585/604。
 
+**v7.0.1**：生命周期加固 —— `stop()` 改为尽力而为且取消安全（发布闸门、处理器绑定与
+中间件拆卸在取消时仍会完成），`start()` 取消后会回滚并可重试，`@handler` 支持 PEP 563
+字符串注解（含函数内局部 payload 类），OpenTelemetry observable gauge 返回可迭代
+Observation，`Event.model_dump()` 保留具体负载字段。
+
 ## 🚀 快速开始
 
 ### 基础发布/订阅
