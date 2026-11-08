@@ -822,8 +822,10 @@ class TestMetricsTaskPipeline:
             for _ in range(3):
                 await bus.proxy('test').publish('mw.ping', {'key': 'k', 'count': 1})
             await wait_for_condition(
-                lambda: metrics.snapshot().task_total.get('CountingHandler', {}).get('success', 0) == 3
-                and metrics.snapshot().task_total.get('SimplePingHandler', {}).get('success', 0) == 3
+                lambda: (
+                    metrics.snapshot().task_total.get('CountingHandler', {}).get('success', 0) == 3
+                    and metrics.snapshot().task_total.get('SimplePingHandler', {}).get('success', 0) == 3
+                )
             )
 
         gc.collect()
