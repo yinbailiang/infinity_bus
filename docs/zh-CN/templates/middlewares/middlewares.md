@@ -1,6 +1,6 @@
 # 内置中间件总览
 
-EventBus 提供了 8 个开箱即用的中间件，覆盖日志、指标、限流、转换、屏蔽、递归防护、跨总线转发等常见横切关注点。
+EventBus 提供了 7 个开箱即用的中间件，覆盖审计日志、指标、限流、转换、屏蔽、递归防护、跨总线转发等常见横切关注点。
 所有中间件通过 `MiddlewareChain` 注册，按注册顺序形成洋葱管道。
 
 ---
@@ -15,8 +15,7 @@ EventBus 提供了 8 个开箱即用的中间件，覆盖日志、指标、限�
 | `EventTransformMiddleware` | `before_publish` | 转换事件名 / 注入 / 脱敏字段 | [event_transform.md](event_transform.md) |
 | `MetricsMiddleware` | `before_publish` + `on_publish` + `on_task_done` | Prometheus / OTel 风格指标收集 | [metrics.md](metrics.md) |
 | `EventForwardMiddleware` | `on_publish` | 单向跨总线事件转发 | [event_forward.md](event_forward.md) |
-| `JSONLLoggingMiddleware` | `on_publish` | JSONL 文件持久化日志 | [logging.md](logging.md) |
-| `SQLiteLoggingMiddleware` | `on_publish` | SQLite 数据库持久化日志 | [logging.md](logging.md) |
+| `AuditMiddleware` | `on_publish` | 统一审计日志（JSONL / SQLite / 自定义 Sink） | [audit.md](audit.md) |
 
 ---
 
@@ -39,16 +38,15 @@ EventBus 提供了 8 个开箱即用的中间件，覆盖日志、指标、限�
 ┌─ on_publish 链 ─────────────────────────────────────┐
 │  EventForwardMiddleware  ← 转发到其他总线              │
 │  MetricsMiddleware       ← 记录完整发布耗时（计时终点）  │
-│  JSONLLoggingMiddleware  ← 写入 JSONL 文件             │
-│  SQLiteLoggingMiddleware ← 写入 SQLite 数据库          │
+│  AuditMiddleware         ← 写入审计 Sink               │
 └──────────────────────────────────────────────────────┘
 ```
 
-> **建议注册顺序**：限流 → 递归防护 → 屏蔽 → 转换 → 指标 → 转发 → 日志。
+> **建议注册顺序**：限流 → 递归防护 → 屏蔽 → 转换 → 指标 → 转发 → 审计。
 > 指标中间件横跨 `before_publish`（计时起点）、`on_publish`（计时终点）与
 > `on_task_done`（任务结果 / 执行时长 / 排队时长），
 > 放置在转换之后可确保转换后的新事件名被正确记录在指标中。
-> `on_publish` 阶段的转发和日志中间件顺序：转发在前可确保日志中间仅记录本总线事件。
+> `on_publish` 阶段的转发和审计中间件顺序：转发在前可确保审计仅记录本总线事件。
 
 ---
 
@@ -56,9 +54,18 @@ EventBus 提供了 8 个开箱即用的中间件，覆盖日志、指标、限�
 
 ```python
 from infinity_bus.templates.middlewares import (
-    # 日志
-    JSONLLoggingMiddleware,
-    SQLiteLoggingMiddleware,
+    # 审计
+    AuditMiddleware,
+    AuditPayloadConfig,
+    AuditRecord,
+    AuditRecordRenderer,
+    AuditSink,
+    AuditWriter,
+    AuditWriterConfig,
+    JSONLSink,
+    SQLiteSink,
+    RetentionPolicy,
+    PayloadMode,
     LogFallback,
     # 指标
     MetricsMiddleware,
@@ -84,9 +91,6 @@ from infinity_bus.templates.middlewares import (
     EventFilter,
     TargetBusProvider,
     make_event_name_filter,
-    make_static_target_provider,
-    # 工具
-    serialize_data,
 )
 ```
 

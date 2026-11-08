@@ -213,17 +213,21 @@ metrics = MetricsMiddleware(histogram_bounds=(0.01, 0.05, 0.1, 0.5, 1.0, 5.0))
 
 ```python
 from infinity_bus.templates.middlewares import (
+    AuditMiddleware,
+    AuditRecordRenderer,
+    AuditWriter,
+    JSONLSink,
     MetricsMiddleware,
     RateLimitMiddleware,
-    JSONLLoggingMiddleware,
 )
 
 chain = MiddlewareChain()
-chain.add(RateLimitMiddleware(max_requests=100, window_seconds=1.0))
-chain.add(metrics := MetricsMiddleware())
-chain.add(JSONLLoggingMiddleware("events.jsonl"))
+await chain.add(RateLimitMiddleware(max_requests=100, window_seconds=1.0))
+await chain.add(metrics := MetricsMiddleware())
+audit_writer = AuditWriter(JSONLSink("events.jsonl"), AuditRecordRenderer())
+await chain.add(AuditMiddleware(audit_writer))
 
-# Execution order: rate limit → metrics collection → logging
+# Execution order: rate limit → metrics collection → audit
 # Metrics will record rate-limited rejected events (counted in publish_total + errors_total)
 ```
 

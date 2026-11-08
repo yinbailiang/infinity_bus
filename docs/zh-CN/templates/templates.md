@@ -22,7 +22,7 @@
 | [handlers/](handlers/handlers.md) | 处理器模板集合 | 邮箱模式（串行消费、背压）+ 服务处理器（RPC 服务端） | [handlers 总览](handlers/handlers.md) |
 | `idempotency` | 幂等（注入去重） | at-least-once 重复投递去重、跨重启强幂等 | [idempotency.md](idempotency.md) |
 | [queues/](queues/queues.md) | 跨进程队列 | 多进程共享总线、fanout 泛洪、补投/不补投、负载重建 | [queues 总览](queues/queues.md) |
-| [middlewares/](middlewares/middlewares.md) | 中间件集合 | 日志、限流、转换、屏蔽、递归防护 | [中间件总览](middlewares/middlewares.md) |
+| [middlewares/](middlewares/middlewares.md) | 中间件集合 | 审计日志、限流、转换、屏蔽、递归防护 | [中间件总览](middlewares/middlewares.md) |
 
 ---
 
@@ -93,9 +93,13 @@ from infinity_bus.templates import (
     'InMemoryIdempotencyRecorder', 'SqliteIdempotencyRecorder',
     # queues（详见 queues/queues.md）
     'EventCodec', 'PayloadType', 'RabbitFanoutQueue',
+    # audit（详见 middlewares/audit.md）
+    'AuditMiddleware', 'AuditPayloadConfig', 'AuditRecord', 'AuditRecordRenderer',
+    'AuditSink', 'AuditWriter', 'AuditWriterConfig',
+    'JSONLSink', 'SQLiteSink',
+    'RetentionPolicy', 'PayloadMode', 'LogFallback',
     # middlewares（详见中间件总览）
     'EventBlockMiddleware', 'EventForwardMiddleware', 'EventTransformMiddleware',
-    'JSONLLoggingMiddleware', 'SQLiteLoggingMiddleware',
     'MetricsMiddleware', 'MetricsSnapshot',
     'RateLimitMiddleware', 'RecursionGuardMiddleware',
     'RecursionDetectedError',
@@ -103,9 +107,9 @@ from infinity_bus.templates import (
     'make_field_redact_transform', 'make_blocklist_predicate',
     'make_allowlist_predicate', 'make_event_name_filter',
     'make_bidirectional_forward',
-    # middlewares 类型别名 & 工具
-    'BlockPredicate', 'EventFilter', 'LogFallback',
-    'TargetBusProvider', 'TransformFunc', 'serialize_data',
+    # middlewares 类型别名
+    'BlockPredicate', 'EventFilter',
+    'TargetBusProvider', 'TransformFunc',
 )
 ```
 
@@ -225,13 +229,17 @@ events.register_all_events(event_registry)
 
 ```python
 from infinity_bus.templates.middlewares import (
-    JSONLLoggingMiddleware,
-    RateLimitMiddleware,
+    AuditMiddleware,
+    AuditRecordRenderer,
+    AuditWriter,
+    JSONLSink,
     MetricsMiddleware,
+    RateLimitMiddleware,
 )
 
 chain = MiddlewareChain()
 await chain.add(RateLimitMiddleware(max_per_second=100))
 await chain.add(MetricsMiddleware())
-await chain.add(JSONLLoggingMiddleware("events.jsonl"))
+audit_writer = AuditWriter(JSONLSink("events.jsonl"), AuditRecordRenderer())
+await chain.add(AuditMiddleware(audit_writer))
 ```

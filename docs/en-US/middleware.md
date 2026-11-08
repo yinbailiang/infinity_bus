@@ -238,7 +238,8 @@ automatically.
 chain = bus_proxy.middleware
 
 # Hot-add — on_setup is called immediately
-await chain.add(AuditMiddleware())
+audit_writer = AuditWriter(JSONLSink("events.jsonl"), AuditRecordRenderer())
+await chain.add(AuditMiddleware(audit_writer))
 
 # Hot-remove — on_teardown is called immediately
 # Note: in-flight chains may still invoke the middleware after this
@@ -268,12 +269,11 @@ See [templates/middlewares/](templates/middlewares/middlewares.md) for detailed 
 
 | Middleware | Hook | Description |
 | - | - | - |
-| `JSONLLoggingMiddleware` | `on_publish` | Append events to JSONL file (zero deps). |
-| `SQLiteLoggingMiddleware` | `on_publish` | Log events to SQLite database (requires `aiosqlite`). |
+| `AuditMiddleware` | `on_publish` | Unified audit logging (JSONL / SQLite / custom sink). |
 | `RateLimitMiddleware` | `before_publish` | Sliding-window rate limiting (global or per-event). |
 | `EventTransformMiddleware` | `before_publish` | Transform event name, data fields (rename, redact, inject). |
 | `EventBlockMiddleware` | `before_publish` | Block events matching predicates (allowlist/blocklist). |
-| `EventForwardMiddleware` | `before_publish` | Forward events to another EventBus instance. |
+| `EventForwardMiddleware` | `on_publish` | Forward events to another EventBus instance. |
 | `RecursionGuardMiddleware` | `before_publish` | Prevent infinite event loops (configurable depth). |
 | `MetricsMiddleware` | `before_publish` | Lightweight Prometheus/OTel-style metrics. |
 
@@ -281,7 +281,7 @@ See [templates/middlewares/](templates/middlewares/middlewares.md) for detailed 
 
 ## Usage Examples
 
-### Logging Middleware
+### Custom Logging Middleware
 
 Log every published event with timing:
 
@@ -400,7 +400,8 @@ class HotReloadHandler(EventHandler):
         chain = bus_proxy.middleware
 
         # Hot-add — on_setup is called immediately
-        await chain.add(AuditMiddleware())
+        audit_writer = AuditWriter(JSONLSink("events.jsonl"), AuditRecordRenderer())
+        await chain.add(AuditMiddleware(audit_writer))
 
         # Hot-remove — on_teardown is called immediately
         # Note: in-flight chains may still invoke the middleware after this

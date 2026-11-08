@@ -1,3 +1,17 @@
+from .audit import (
+    AuditMiddleware,
+    AuditPayloadConfig,
+    AuditRecord,
+    AuditRecordRenderer,
+    AuditSink,
+    AuditWriter,
+    AuditWriterConfig,
+    JSONLSink,
+    LogFallback,
+    PayloadMode,
+    RetentionPolicy,
+    SQLiteSink,
+)
 from .event_block import BlockPredicate, EventBlockMiddleware, make_allowlist_predicate, make_blocklist_predicate
 from .event_forward import (
     EventFilter,
@@ -13,15 +27,23 @@ from .event_transform import (
     make_field_redact_transform,
     make_rename_transform,
 )
-from .logging import JSONLLoggingMiddleware, LogFallback, SQLiteLoggingMiddleware, serialize_data
 from .metrics import MetricsMiddleware, MetricsSnapshot
 from .rate_limit import RateLimitMiddleware
 from .recursion_guard import RecursionDetectedError, RecursionGuardMiddleware
 
 __all__ = [
-    # 日志
-    'JSONLLoggingMiddleware',
-    'SQLiteLoggingMiddleware',
+    # 审计
+    'AuditMiddleware',
+    'AuditPayloadConfig',
+    'AuditRecord',
+    'AuditRecordRenderer',
+    'AuditSink',
+    'AuditWriter',
+    'AuditWriterConfig',
+    'JSONLSink',
+    'SQLiteSink',
+    'RetentionPolicy',
+    'PayloadMode',
     'LogFallback',
     # 指标
     'MetricsMiddleware',
@@ -48,6 +70,4 @@ __all__ = [
     # 递归防护
     'RecursionGuardMiddleware',
     'RecursionDetectedError',
-    # 工具
-    'serialize_data',
 ]

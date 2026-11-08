@@ -1,7 +1,7 @@
 # Built-in Middlewares Overview
 
-EventBus provides 8 out-of-the-box middlewares covering common cross-cutting concerns:
-logging, metrics, rate limiting, transform, blocking, recursion guard, and cross-bus forwarding.
+EventBus provides 7 out-of-the-box middlewares covering common cross-cutting concerns:
+audit logging, metrics, rate limiting, transform, blocking, recursion guard, and cross-bus forwarding.
 All middlewares are registered via `MiddlewareChain`, forming an onion pipeline in
 registration order.
 
@@ -17,8 +17,7 @@ registration order.
 | `EventTransformMiddleware` | `before_publish` | Event name transform / field inject / redact | [event_transform.md](event_transform.md) |
 | `MetricsMiddleware` | `before_publish` + `on_publish` + `on_task_done` | Prometheus / OTel style metrics collection | [metrics.md](metrics.md) |
 | `EventForwardMiddleware` | `on_publish` | Unidirectional cross-bus event forwarding | [event_forward.md](event_forward.md) |
-| `JSONLLoggingMiddleware` | `on_publish` | JSONL file persistent logging | [logging.md](logging.md) |
-| `SQLiteLoggingMiddleware` | `on_publish` | SQLite database persistent logging | [logging.md](logging.md) |
+| `AuditMiddleware` | `on_publish` | Unified audit logging (JSONL / SQLite / custom sink) | [audit.md](audit.md) |
 
 ---
 
@@ -41,18 +40,17 @@ Publish Request
 ┌─ on_publish chain ─────────────────────────────────────────┐
 │  EventForwardMiddleware    ← Forward to other buses          │
 │  MetricsMiddleware         ← Record full publish latency (timer end) │
-│  JSONLLoggingMiddleware    ← Write to JSONL file              │
-│  SQLiteLoggingMiddleware   ← Write to SQLite database         │
+│  AuditMiddleware           ← Write to the audit sink          │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 > **Recommended registration order**: Rate Limit → Recursion Guard → Block → Transform →
-> Metrics → Forward → Logging.
+> Metrics → Forward → Audit.
 > The metrics middleware spans `before_publish` (timer start), `on_publish` (timer end), and
 > `on_task_done` (task outcome / execution latency / queue latency);
 > placing it after Transform ensures transformed event names are correctly recorded in metrics.
-> Placing forwarding before logging in the `on_publish` phase ensures log middlewares only
-> record events from the local bus.
+> Placing forwarding before audit in the `on_publish` phase ensures audit only records
+> events from the local bus.
 
 ---
 
@@ -60,9 +58,18 @@ Publish Request
 
 ```python
 from infinity_bus.templates.middlewares import (
-    # Logging
-    JSONLLoggingMiddleware,
-    SQLiteLoggingMiddleware,
+    # Audit
+    AuditMiddleware,
+    AuditPayloadConfig,
+    AuditRecord,
+    AuditRecordRenderer,
+    AuditSink,
+    AuditWriter,
+    AuditWriterConfig,
+    JSONLSink,
+    SQLiteSink,
+    RetentionPolicy,
+    PayloadMode,
     LogFallback,
     # Metrics
     MetricsMiddleware,
@@ -88,9 +95,6 @@ from infinity_bus.templates.middlewares import (
     EventFilter,
     TargetBusProvider,
     make_event_name_filter,
-    make_static_target_provider,
-    # Utilities
-    serialize_data,
 )
 ```
 

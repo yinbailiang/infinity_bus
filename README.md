@@ -66,7 +66,7 @@
 | Python Version | 3.12+ | 3.11+ | 3.12+ | 3.7–3.14 |
 | Baseline Version | v6.0.0 `32b43a5` | v1.5.6 `7c09342` | v13.0.1 `5157de2` | v4.0.7 `4ec2c47` |
 
-> **Choose InfinityBus when**: you need a middleware-native architecture — hot-reloadable onion pipeline with 8 built-in middlewares (logging, metrics, rate-limit, transform, block, recursion guard, forwarding); you run pyright strict across the entire codebase with literally zero `# type: ignore` in any production code; you want full production-grade features (backpressure, graceful shutdown, regex subscriptions, Pydantic payload validation) with a single core dependency.
+> **Choose InfinityBus when**: you need a middleware-native architecture — hot-reloadable onion pipeline with 7 built-in middlewares (audit logging, metrics, rate-limit, transform, block, recursion guard, forwarding); you run pyright strict across the entire codebase with literally zero `# type: ignore` in any production code; you want full production-grade features (backpressure, graceful shutdown, regex subscriptions, Pydantic payload validation) with a single core dependency.
 >
 > **Choose bubus when**: you need built-in event return values and event forwarding; you need Python 3.11 support; you prefer the class-driven API style of `bus.on(EventClass, fn)`.
 >
@@ -91,7 +91,7 @@
 # Core (pub/sub and middleware pipeline only)
 pip install infinity_bus
 
-# Core + advanced templates (expect, request, pipe, SQLite logging, etc.)
+# Core + advanced templates (expect, request, pipe, SQLite audit, etc.)
 pip install infinity_bus[templates]
 ```
 
@@ -105,8 +105,9 @@ uv add infinity_bus
 uv add infinity_bus --extra templates
 ```
 
-> **Note**: Advanced templates (`expect`, `request`, `pipe`, `SQLiteLoggingMiddleware`)
-> require the `[templates]` extra. Using them without installing the extra will raise an `ImportError`.
+> **Note**: Advanced templates (`expect`, `request`, `pipe`) and the built-in audit sinks
+> (`JSONLSink`, `SQLiteSink`) require the `[templates]` extra. Using them without installing
+> the extra will raise an `ImportError`.
 
 Or install from source:
 
@@ -299,7 +300,7 @@ asyncio.run(main())
 | **Middleware** | Middleware base class, onion + task pipelines: publish / dispatch / task-lifecycle hooks |
 | **MiddlewareChain** | Chain of responsibility manager; wraps the publish flow in order |
 | **templates** | Advanced templates: `handler` simplified API, `expect` listener, `request` RPC, `pipe` channel, `register` batch registration |
-| **middlewares** | Built-in middlewares: logging (JSONL+SQLite), rate limiting, transform, block, recursion guard |
+| **middlewares** | Built-in middlewares: audit logging (JSONL+SQLite), rate limiting, transform, block, recursion guard |
 
 ## 📚 Documentation
 
@@ -310,7 +311,7 @@ asyncio.run(main())
 | [Core Overview](docs/en-US/infinity_bus.md) | Event / EventDeclaration / EventHandler / EventBus / Middleware core concepts |
 | [Middleware System](docs/en-US/middleware.md) | `Middleware` base class, `MiddlewareChain` onion pipeline |
 | [Advanced Templates](docs/en-US/templates/templates.md) | `expect`, `request`, `pipe`, `register` — the four major templates |
-| [Built-in Middlewares](docs/en-US/templates/middlewares/middlewares.md) | Logging, rate limiting, transform, block, recursion guard |
+| [Built-in Middlewares](docs/en-US/templates/middlewares/middlewares.md) | Audit logging, rate limiting, transform, block, recursion guard |
 | [Engineering Quality](ENGINEERING.md) | Type safety, test coverage, pre-commit gating, modularity standards |
 
 ## 🧪 Testing

@@ -66,7 +66,7 @@
 | Python 版本 | 3.12+ | 3.11+ | 3.12+ | 3.7–3.14 |
 | 基准版本 | v6.0.0 `32b43a5` | v1.5.6 `7c09342` | v13.0.1 `5157de2` | v4.0.7 `4ec2c47` |
 
-> **选择 InfinityBus 的理由**：你需要中间件原生架构——可热重载的洋葱管道，内置 8 个中间件（日志、指标、限流、转换、屏蔽、防递归、转发）；你要求整个代码库通过 pyright strict 且生产代码**零 `# type: ignore`**；你希望用单一核心依赖获得完整的生产级特性（背压、优雅停机、正则订阅、Pydantic 负载校验）。
+> **选择 InfinityBus 的理由**：你需要中间件原生架构——可热重载的洋葱管道，内置 7 个中间件（审计日志、指标、限流、转换、屏蔽、防递归、转发）；你要求整个代码库通过 pyright strict 且生产代码**零 `# type: ignore`**；你希望用单一核心依赖获得完整的生产级特性（背压、优雅停机、正则订阅、Pydantic 负载校验）。
 >
 > **选择 bubus 的理由**：你需要事件自带返回值、事件转发这类开箱即用的功能；你需要支持 Python 3.11；你偏好 `bus.on(EventClass, fn)` 这种类驱动的 API 风格。
 >
@@ -91,7 +91,7 @@
 # 核心（仅发布/订阅、中间件管道）
 pip install infinity_bus
 
-# 核心 + 高级模板（expect、request、pipe、SQLite 日志等）
+# 核心 + 高级模板（expect、request、pipe、SQLite 审计等）
 pip install infinity_bus[templates]
 ```
 
@@ -105,8 +105,8 @@ uv add infinity_bus
 uv add infinity_bus --extra templates
 ```
 
-> **提示**：高级模板（`expect`、`request`、`pipe`、`SQLiteLoggingMiddleware`）
-> 需要 `[templates]` extra。若未安装而使用这些功能，会收到 `ImportError` 提示。
+> **提示**：高级模板（`expect`、`request`、`pipe`）与内置审计 Sink
+> （`JSONLSink`、`SQLiteSink`）需要 `[templates]` extra。若未安装而使用这些功能，会收到 `ImportError` 提示。
 
 或从源码安装：
 
@@ -293,7 +293,7 @@ asyncio.run(main())
 | **Middleware** | 中间件基类，洋葱管道 + 任务管道：发布 / 派发 / 任务生命周期钩子 |
 | **MiddlewareChain** | 责任链管理器，按序包裹发布流程 |
 | **templates** | 高级模板：`handler` 简化 API、`expect` 监听、`request` RPC、`pipe` 管道、`register` 批量注册 |
-| **middlewares** | 内置中间件：日志(JSONL+SQLite)、限流、转换、屏蔽、递归防护 |
+| **middlewares** | 内置中间件：审计日志(JSONL+SQLite)、限流、转换、屏蔽、递归防护 |
 
 ## 📚 文档
 
@@ -304,7 +304,7 @@ asyncio.run(main())
 | [核心总览](docs/zh-CN/infinity_bus.md) | Event / EventDeclaration / EventHandler / EventBus / Middleware 核心概念 |
 | [中间件系统](docs/zh-CN/middleware.md) | `Middleware` 基类、`MiddlewareChain` 洋葱管道 |
 | [高级模板](docs/zh-CN/templates/templates.md) | `expect`、`request`、`pipe`、`register` 四大模板总览 |
-| [内置中间件](docs/zh-CN/templates/middlewares/middlewares.md) | 日志、限流、转换、屏蔽、递归防护 |
+| [内置中间件](docs/zh-CN/templates/middlewares/middlewares.md) | 审计日志、限流、转换、屏蔽、递归防护 |
 | [工程质量](ENGINEERING.md) | 类型安全、测试覆盖、pre-commit 门禁、模块化规范 |
 
 ## 🧪 测试

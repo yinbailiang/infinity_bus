@@ -23,7 +23,7 @@ Advanced patterns built on top of the core event bus. These are optional — imp
 | [handlers/](handlers/handlers.md) | Handler Template Collection | Mailbox pattern (serial, backpressure) + service handler (RPC server side) | [Handlers Overview](handlers/handlers.md) |
 | `idempotency` | Idempotency (injected dedup) | at-least-once dedup, cross-restart strong idempotency | [idempotency.md](idempotency.md) |
 | [queues/](queues/queues.md) | Cross-Process Queues | Shared bus across processes, fanout, replay / no-replay, payload rebuild | [Queues Overview](queues/queues.md) |
-| [middlewares/](middlewares/middlewares.md) | Middleware Collection | Logging, rate-limiting, transform, blocking, recursion guard | [Middlewares Overview](middlewares/middlewares.md) |
+| [middlewares/](middlewares/middlewares.md) | Middleware Collection | Audit logging, rate-limiting, transform, blocking, recursion guard | [Middlewares Overview](middlewares/middlewares.md) |
 
 ---
 
@@ -97,9 +97,13 @@ from infinity_bus.templates import (
     'InMemoryIdempotencyRecorder', 'SqliteIdempotencyRecorder',
     # queues (see queues/queues.md)
     'EventCodec', 'PayloadType', 'RabbitFanoutQueue',
+    # audit (see middlewares/audit.md)
+    'AuditMiddleware', 'AuditPayloadConfig', 'AuditRecord', 'AuditRecordRenderer',
+    'AuditSink', 'AuditWriter', 'AuditWriterConfig',
+    'JSONLSink', 'SQLiteSink',
+    'RetentionPolicy', 'PayloadMode', 'LogFallback',
     # middlewares (see middlewares overview)
     'EventBlockMiddleware', 'EventForwardMiddleware', 'EventTransformMiddleware',
-    'JSONLLoggingMiddleware', 'SQLiteLoggingMiddleware',
     'MetricsMiddleware', 'MetricsSnapshot',
     'RateLimitMiddleware', 'RecursionGuardMiddleware',
     'RecursionDetectedError',
@@ -107,9 +111,9 @@ from infinity_bus.templates import (
     'make_field_redact_transform', 'make_blocklist_predicate',
     'make_allowlist_predicate', 'make_event_name_filter',
     'make_bidirectional_forward',
-    # middlewares type aliases & utilities
-    'BlockPredicate', 'EventFilter', 'LogFallback',
-    'TargetBusProvider', 'TransformFunc', 'serialize_data',
+    # middlewares type aliases
+    'BlockPredicate', 'EventFilter',
+    'TargetBusProvider', 'TransformFunc',
 )
 ```
 
@@ -229,13 +233,17 @@ See [middlewares/middlewares.md](middlewares/middlewares.md) for full documentat
 
 ```python
 from infinity_bus.templates.middlewares import (
-    JSONLLoggingMiddleware,
-    RateLimitMiddleware,
+    AuditMiddleware,
+    AuditRecordRenderer,
+    AuditWriter,
+    JSONLSink,
     MetricsMiddleware,
+    RateLimitMiddleware,
 )
 
 chain = MiddlewareChain()
-chain.add(JSONLLoggingMiddleware("events.jsonl"))
-chain.add(RateLimitMiddleware(max_requests=100, window_seconds=1.0))
-chain.add(MetricsMiddleware())
+await chain.add(RateLimitMiddleware(max_requests=100, window_seconds=1.0))
+await chain.add(MetricsMiddleware())
+audit_writer = AuditWriter(JSONLSink("events.jsonl"), AuditRecordRenderer())
+await chain.add(AuditMiddleware(audit_writer))
 ```
