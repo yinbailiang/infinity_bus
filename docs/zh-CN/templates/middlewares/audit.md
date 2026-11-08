@@ -2,19 +2,31 @@
 
 ## 概述
 
-统一审计日志系统由两部分组成：
+统一审计日志系统由以下部分组成：
 
-- `AuditMiddleware`：挂在 `on_publish` 的管线层，负责有界队列、攒批、失败退避重连、
-  停机排空与降级计数。
-- `AuditSink`：存储后端接口。内置 `JSONLSink` 与 `SQLiteSink`，也可以自行实现。
+- `AuditMiddleware`：`on_publish` 门面。只负责把事件 / 错误包装成 `PendingEvent` /
+  `PendingError` 并交给 writer。
+- `AuditWriter`：持有有界队列、攒批、写入 / 维护任务、重试退避、状态机、计数器与
+  fallback 处理。
+- `AuditRecordRenderer`：按 `AuditPayloadConfig` 把 `Pending` 渲染成 `AuditRecord`。
+- `AuditSink`：被动存储接口。内置 `JSONLSink` 与 `SQLiteSink`，也可以自行实现。
 
-发布路径只执行一次 `put_nowait`；记录构建、序列化、写库与保留策略全部在后台任务中完成，
+组装由用户显式完成：
+
+```python
+sink = SQLiteSink('audit.db')
+renderer = AuditRecordRenderer(AuditPayloadConfig(payload_mode='full'))
+writer = AuditWriter(sink, renderer, AuditWriterConfig(batch_size=200))
+middleware = AuditMiddleware(writer)
+```
+
+发布路径只执行一次 `put_nowait`；记录渲染、攒批、写库与保留策略全部在 writer 的后台任务中完成，
 不会阻塞业务发布。
 
 ```text
-publish ──on_publish──▶ AuditMiddleware ──put_nowait──▶ 有界队列
+publish ──on_publish──▶ AuditMiddleware ──enqueue──▶ AuditWriter 队列
                                                           │
-                                          writer task（攒批 + flush_interval）
+                                          writer task（渲染 + 攒批）
                                                           │
                                             AuditSink.write(list[AuditRecord])
                                                        ╱          ╲
@@ -32,68 +44,122 @@ publish ──on_publish──▶ AuditMiddleware ──put_nowait──▶ 有�
 
 ```python
 from infinity_bus import EventBus, MiddlewareChain
-from infinity_bus.templates.middlewares import AuditMiddleware, RetentionPolicy, SQLiteSink
-
-chain = MiddlewareChain()
-await chain.add(
-    AuditMiddleware(
-        SQLiteSink(
-            'audit.db',
-            retention=RetentionPolicy(
-                retention_seconds=7 * 24 * 3600,
-                max_rows=1_000_000,
-                max_bytes=64 * 1024 * 1024,
-            ),
-        )
-    )
+from infinity_bus.templates.middlewares import (
+    AuditMiddleware,
+    AuditPayloadConfig,
+    AuditRecordRenderer,
+    AuditWriter,
+    AuditWriterConfig,
+    RetentionPolicy,
+    SQLiteSink,
 )
 
+sink = SQLiteSink(
+    'audit.db',
+    retention=RetentionPolicy(
+        retention_seconds=7 * 24 * 3600,
+        max_rows=1_000_000,
+        max_bytes=64 * 1024 * 1024,
+    ),
+)
+renderer = AuditRecordRenderer(
+    AuditPayloadConfig(
+        payload_mode='full',
+        payload_max_bytes=256 * 1024,
+    )
+)
+writer = AuditWriter(sink, renderer, AuditWriterConfig(batch_size=200))
+middleware = AuditMiddleware(writer)
+
+chain = MiddlewareChain()
+await chain.add(middleware)
 bus = EventBus(events, handlers, middleware_chain=chain)
 ```
 
 ### JSONL
 
 ```python
-from infinity_bus.templates.middlewares import AuditMiddleware, JSONLSink
+from infinity_bus.templates.middlewares import (
+    AuditMiddleware,
+    AuditRecordRenderer,
+    AuditWriter,
+    JSONLSink,
+)
 
-await chain.add(AuditMiddleware(JSONLSink('events.jsonl')))
+sink = JSONLSink('events.jsonl')
+writer = AuditWriter(sink, AuditRecordRenderer())
+middleware = AuditMiddleware(writer)
+
+await chain.add(middleware)
 ```
 
 ## AuditMiddleware
 
-### 参数
+### 构造
+
+```python
+AuditMiddleware(writer: AuditWriter)
+```
+
+`AuditMiddleware` 没有自己的配置。队列 / 重试 / 生命周期配置属于
+`AuditWriterConfig`；负载渲染配置属于 `AuditPayloadConfig`。两个配置均为不可变
+Pydantic 模型，构造时一次校验。
+
+### AuditWriterConfig 参数
 
 | 参数 | 默认 | 说明 |
 | - | - | - |
-| `sink` | 必填 | 存储后端 |
 | `batch_size` | `100` | 单批最大记录数 |
 | `flush_interval` | `0.5` | 单批最长等待（秒），与 `batch_size` 先到先写 |
 | `queue_maxsize` | `10_000` | 有界队列；满时丢弃最新记录并计数，绝不阻塞发布 |
-| `payload_mode` | `'digest'` | `'digest'` 只存大小与 SHA-256；`'full'` 额外存正文 |
-| `payload_allowlist` | `()` | 事件名白名单，命中时始终存正文 |
-| `payload_max_bytes` | `64 * 1024` | 正文超过此值时只保留摘要 |
 | `fallback` | `None` | 降级回调，签名 `(line: str) -> None`；默认 `logging.warning` |
-| `extra_fields` | `None` | 每条记录追加的静态字段，例如 `{"env": "prod"}` |
 | `reconnect_backoff` | `1.0` | 首次重连退避（秒），之后指数增长 |
-| `reconnect_backoff_max` | `30.0` | 退避上限（秒） |
+| `reconnect_backoff_max` | `30.0` | 退避上限（秒），不得小于 `reconnect_backoff` |
 | `close_timeout` | `5.0` | 停机排空队列的超时（秒） |
-| `maintenance_interval` | `60.0` | 独立周期维护间隔（秒）；`None` 关闭。即使没有事件也会触发保留策略 |
+| `maintenance_interval` | `60.0` | 独立周期维护间隔（秒）；`None` 关闭独立维护任务 |
+
+> `maintenance_interval=None` 仅关闭独立维护任务；每批成功写入后仍会调用 `sink.maintain()`。
+
+### AuditPayloadConfig 参数
+
+| 参数 | 默认 | 说明 |
+| - | - | - |
+| `payload_mode` | `'digest'` | `'digest'` 只存大小与 SHA-256；`'full'` 额外存正文 |
+| `payload_allowlist` | `()` | 事件名白名单，命中时保留正文（仍受 `payload_max_bytes` 限制） |
+| `payload_max_bytes` | `64 * 1024` | 正文超过此值时只保留摘要；`None` 表示不限制 |
+| `extra_fields` | `{}` | 每条记录追加的静态字段，例如 `{"env": "prod"}` |
 
 ### 观测
 
 | 属性 / 方法 | 说明 |
 | - | - |
 | `flush()` | 等待当前队列中的记录全部落库或降级 |
-| `written_count` | 成功写入 Sink 的记录数 |
-| `dropped_count` | 因队列满 / 关闭后调用而丢弃的记录数 |
-| `write_error_count` | 写入失败批次数 |
-| `fallback_count` | 转交 fallback 的记录数 |
-| `degraded` | 当前是否处于「存储不可用、只走 fallback」状态 |
-| `queue_size` | 当前待写入队列长度 |
+| `state` | 当前状态对象；计数器与降级信息都在其中 |
+| `writer` | 底层 `AuditWriter` |
+| `sink` | 底层 `AuditSink` |
+
+计数直接读取 `middleware.state`（`written_count`、`dropped_count`、
+`write_error_count`、`fallback_count`）；队列长度读取 `middleware.writer.queue_size`。
+配置通过 `middleware.writer.config` 与 `middleware.writer.renderer.config` 访问。
+
+### 状态机
+
+真正的状态迁移由 `AuditStateMachine`（`state_machine.py`）负责；`AuditWriter`
+持有队列、任务、状态机与 Sink I/O，`AuditMiddleware` 只是发布侧门面。状态机只持有一个状态对象：
+
+| 状态 | 含义 | 专属字段 |
+| - | - | - |
+| `RunningState` | Sink 可用，正常写入 | - |
+| `DegradedState` | Sink 不可用，记录走 fallback | `next_retry_at`、`backoff` |
+| `ClosingState` | 停机中，新记录被丢弃 | - |
+| `ClosedState` | 停机完成 | - |
+
+共享计数器定义在 `AuditState` 上；状态切换通过 `inherit()` 保留计数，行为分支由
+`match` 语句驱动。时钟可注入，退避行为可用同步测试验证。
 
 ### 失败与恢复
 
-1. `on_setup` 打开 Sink 失败（依赖缺失除外）不会阻断总线启动：进入降级模式，
+1. `AuditWriter.start()` 打开 Sink 失败（依赖缺失除外）不会阻断总线启动：进入降级模式，
    队列中的记录走 `fallback`，并按指数退避重连。
 2. 写入失败：先调用 `sink.reclaim()` 强制回收空间（忽略保留策略的内部限频），
    再关闭 Sink、进入退避；到点后重新 `open()`，成功即自动恢复写入。
@@ -101,8 +167,8 @@ await chain.add(AuditMiddleware(JSONLSink('events.jsonl')))
    服务空闲或持续写失败时仍会清理。Sink 因写失败关闭时，维护任务会尝试
    重新打开它并继续清理。
 4. Sink 的 `maintain()` 失败只记录日志，不影响后续写入。
-5. 停机时先停止维护任务，再排空队列（`close_timeout`）并关闭 Sink；`on_teardown`
-   可重复调用。
+5. `AuditWriter.stop()` 先停止维护任务，再排空队列（`close_timeout`）并关闭 Sink；
+   `AuditMiddleware.on_teardown` 委托给它，可重复调用。
 6. `aiosqlite` / `aiofiles` 未安装时，对应的 Sink 在 `open()` 阶段抛出 `ImportError`
    并由总线启动流程上报（不会被静默降级）。
 
@@ -218,7 +284,7 @@ CREATE INDEX IF NOT EXISTS idx_event_log_ts ON event_log(ts);
 空洞下越删越多。删除后调用 `PRAGMA incremental_vacuum` 回收空间；旧库首次启用
 `max_bytes` 时会执行一次 `VACUUM`（可用 `vacuum=False` 关闭）。
 
-清理不依赖事件写入：`AuditMiddleware` 的维护任务按 `maintenance_interval` 周期调用
+清理不依赖事件写入：`AuditWriter` 的维护任务按 `maintenance_interval` 周期调用
 `sink.maintain()`；写入失败时还会调用 `sink.reclaim()` 跳过 `prune_interval` 立即
 回收，避免磁盘已满导致持续失败。
 
@@ -227,7 +293,13 @@ CREATE INDEX IF NOT EXISTS idx_event_log_ts ON event_log(ts);
 ```python
 from collections.abc import Sequence
 
-from infinity_bus.templates.middlewares import AuditRecord, AuditSink
+from infinity_bus.templates.middlewares import (
+    AuditMiddleware,
+    AuditRecord,
+    AuditRecordRenderer,
+    AuditSink,
+    AuditWriter,
+)
 
 
 class PrintSink(AuditSink):
@@ -244,11 +316,15 @@ class PrintSink(AuditSink):
 
     async def close(self) -> None:
         pass
+
+
+writer = AuditWriter(PrintSink(), AuditRecordRenderer())
+middleware = AuditMiddleware(writer)
 ```
 
 自定义 Sink 只需实现 `open / write / close` 与 `is_open`；重连、退避、队列与降级由
-`AuditMiddleware` 统一处理。可选实现 `maintain()` 做周期性维护，以及 `reclaim()`
-在写入失败后执行一次跳过限频的强制空间回收。中间件会串行调用 Sink 方法
+`AuditWriter` 统一处理。可选实现 `maintain()` 做周期性维护，以及 `reclaim()`
+在写入失败后执行一次跳过限频的强制空间回收。Writer 会串行调用 Sink 方法
 （写入与维护不会并发），实现无需额外加锁。
 
 ## 从旧版迁移
@@ -257,19 +333,25 @@ class PrintSink(AuditSink):
 
 | v6 | 新版 |
 | - | - |
-| `JSONLLoggingMiddleware(path)` | `AuditMiddleware(JSONLSink(path))` |
-| `SQLiteLoggingMiddleware(path)` | `AuditMiddleware(SQLiteSink(path))` |
+| `JSONLLoggingMiddleware(path)` | `AuditMiddleware(AuditWriter(JSONLSink(path), AuditRecordRenderer()))` |
+| `SQLiteLoggingMiddleware(path)` | `AuditMiddleware(AuditWriter(SQLiteSink(path), AuditRecordRenderer()))` |
 | `serialize_data(data)` | 记录内部使用规范化 JSON；需要时用 `json.dumps` |
 | `LogFallback` | 仍从 `infinity_bus.templates` 导出 |
 
 行为差异：
 
-- 新 API 默认 `payload_mode='digest'`，不保存正文；需要旧行为时显式传 `payload_mode='full'`。
-- 写入改为后台攒批，不再在发布路径上同步落库；停机与测试可用 `await middleware.flush()` 等待落库。
+- 配置拆分：`AuditWriterConfig` 负责队列 / 攒批 / 重试 / 生命周期，
+  `AuditPayloadConfig` 负责负载记录方式；分别交给 writer 与 renderer，两个配置均为
+  不可变模型、构造时一次校验。
+- 新 API 默认 `payload_mode='digest'`，不保存正文；需要旧行为时给 renderer 传
+  `AuditPayloadConfig(payload_mode='full')`。
+- 写入改为后台攒批，不再在发布路径上同步落库；停机与测试可用
+  `await middleware.flush()`（或 `await writer.flush()`）等待落库。
 - `SQLiteLoggingMiddleware` 的 `is_connect` 永久降级 bug 不再存在；`SQLiteSink.is_open`
   在关闭后返回 `False`。
 
 ## 完整示例
 
-参见 `tests/templates/middlewares/audit/`：记录模型、JSONL 后端、SQLite 保留策略与磁盘回收、
-中间件攒批 / 降级 / 重连 / 停机排空等场景均有覆盖。
+参见 `tests/templates/middlewares/audit/` 与 `tests/templates/middlewares/audit/sinks/`：
+记录模型、JSONL 后端、SQLite 保留策略与磁盘回收，
+writer / middleware 攒批、降级、重连、停机排空等场景均有覆盖。

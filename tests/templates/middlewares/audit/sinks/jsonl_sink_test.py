@@ -5,7 +5,8 @@ import json
 
 import pytest
 
-from infinity_bus.templates.middlewares.audit import AuditRecord, JSONLSink
+from infinity_bus.templates.middlewares.audit import AuditRecord
+from infinity_bus.templates.middlewares.audit.sinks import JSONLSink
 
 
 def _record(*, name: str = 'mw.ping', extra: dict[str, object] | None = None) -> AuditRecord:

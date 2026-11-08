@@ -2,20 +2,33 @@
 
 ## Overview
 
-The audit logging system has two layers:
+The audit logging system has four parts:
 
-- `AuditMiddleware`: an `on_publish` middleware that owns the bounded queue, batching,
-  reconnect backoff, shutdown draining, and drop/error counters.
-- `AuditSink`: the storage interface. `JSONLSink` and `SQLiteSink` are built in;
+- `AuditMiddleware`: the `on_publish` facade. It only wraps events / errors into
+  `PendingEvent` / `PendingError` and delegates to a writer.
+- `AuditWriter`: owns the bounded queue, batching, writer / maintenance tasks,
+  reconnect backoff, state machine, counters, and fallback handling.
+- `AuditRecordRenderer`: converts `Pending` items into `AuditRecord` using
+  `AuditPayloadConfig`.
+- `AuditSink`: the passive storage interface. `JSONLSink` and `SQLiteSink` are built in;
   custom backends only need to implement the interface.
 
-The publish path performs a single `put_nowait`; record building, serialization,
-writes, and retention all run in a background task, so publishing is never blocked.
+Assembly is explicit:
+
+```python
+sink = SQLiteSink('audit.db')
+renderer = AuditRecordRenderer(AuditPayloadConfig(payload_mode='full'))
+writer = AuditWriter(sink, renderer, AuditWriterConfig(batch_size=200))
+middleware = AuditMiddleware(writer)
+```
+
+The publish path performs a single `put_nowait`; rendering, batching, writes, and
+retention all run in the writer's background task, so publishing is never blocked.
 
 ```text
-publish ──on_publish──▶ AuditMiddleware ──put_nowait──▶ bounded queue
+publish ──on_publish──▶ AuditMiddleware ──enqueue──▶ AuditWriter queue
                                                           │
-                                          writer task (batching + flush_interval)
+                                          writer task (renderer + batching)
                                                           │
                                             AuditSink.write(list[AuditRecord])
                                                        ╱          ╲
@@ -24,9 +37,9 @@ publish ──on_publish──▶ AuditMiddleware ──put_nowait──▶ boun
                                                         retention / prune / vacuum
 ```
 
-> **Mount point**: always mount on `on_publish` (emission side) for exactly one
-> record per publish. Mounting on `before_dispatch` multiplies records by the
-> fanout member count.
+> **Mount point**: always mount the middleware on `on_publish` (emission side) for
+> exactly one record per publish. Mounting on `before_dispatch` multiplies records by
+> the fanout member count.
 
 ## Quick Start
 
@@ -34,78 +47,138 @@ publish ──on_publish──▶ AuditMiddleware ──put_nowait──▶ boun
 
 ```python
 from infinity_bus import EventBus, MiddlewareChain
-from infinity_bus.templates.middlewares import AuditMiddleware, RetentionPolicy, SQLiteSink
-
-chain = MiddlewareChain()
-await chain.add(
-    AuditMiddleware(
-        SQLiteSink(
-            'audit.db',
-            retention=RetentionPolicy(
-                retention_seconds=7 * 24 * 3600,
-                max_rows=1_000_000,
-                max_bytes=64 * 1024 * 1024,
-            ),
-        )
-    )
+from infinity_bus.templates.middlewares import (
+    AuditMiddleware,
+    AuditPayloadConfig,
+    AuditRecordRenderer,
+    AuditWriter,
+    AuditWriterConfig,
+    RetentionPolicy,
+    SQLiteSink,
 )
 
+sink = SQLiteSink(
+    'audit.db',
+    retention=RetentionPolicy(
+        retention_seconds=7 * 24 * 3600,
+        max_rows=1_000_000,
+        max_bytes=64 * 1024 * 1024,
+    ),
+)
+renderer = AuditRecordRenderer(
+    AuditPayloadConfig(
+        payload_mode='full',
+        payload_max_bytes=256 * 1024,
+    )
+)
+writer = AuditWriter(sink, renderer, AuditWriterConfig(batch_size=200))
+middleware = AuditMiddleware(writer)
+
+chain = MiddlewareChain()
+await chain.add(middleware)
 bus = EventBus(events, handlers, middleware_chain=chain)
 ```
 
 ### JSONL
 
 ```python
-from infinity_bus.templates.middlewares import AuditMiddleware, JSONLSink
+from infinity_bus.templates.middlewares import (
+    AuditMiddleware,
+    AuditRecordRenderer,
+    AuditWriter,
+    JSONLSink,
+)
 
-await chain.add(AuditMiddleware(JSONLSink('events.jsonl')))
+sink = JSONLSink('events.jsonl')
+writer = AuditWriter(sink, AuditRecordRenderer())
+middleware = AuditMiddleware(writer)
+
+await chain.add(middleware)
 ```
 
 ## AuditMiddleware
 
-### Parameters
+### Construction
+
+```python
+AuditMiddleware(writer: AuditWriter)
+```
+
+`AuditMiddleware` has no configuration of its own. Queue / retry / lifecycle settings
+belong to `AuditWriterConfig`; payload rendering settings belong to
+`AuditPayloadConfig`. Both configs are frozen and validated once by Pydantic.
+
+### AuditWriterConfig Parameters
 
 | Parameter | Default | Description |
 | - | - | - |
-| `sink` | required | Storage backend |
 | `batch_size` | `100` | Maximum records per batch |
 | `flush_interval` | `0.5` | Maximum wait (seconds) before flushing a batch |
 | `queue_maxsize` | `10_000` | Bounded queue; drops newest records and counts them when full |
-| `payload_mode` | `'digest'` | `'digest'`: size + SHA-256 only; `'full'`: also store the body |
-| `payload_allowlist` | `()` | Event names that always keep the body |
-| `payload_max_bytes` | `64 * 1024` | Bodies above this size fall back to digest |
 | `fallback` | `None` | Callback `(line: str) -> None`; defaults to `logging.warning` |
-| `extra_fields` | `None` | Static fields added to every record, e.g. `{"env": "prod"}` |
 | `reconnect_backoff` | `1.0` | Initial reconnect backoff (seconds), exponential afterwards |
-| `reconnect_backoff_max` | `30.0` | Backoff ceiling (seconds) |
+| `reconnect_backoff_max` | `30.0` | Backoff ceiling (seconds); must be >= `reconnect_backoff` |
 | `close_timeout` | `5.0` | Queue drain timeout during shutdown (seconds) |
-| `maintenance_interval` | `60.0` | Independent maintenance interval (seconds); `None` disables it. Retention runs even without events |
+| `maintenance_interval` | `60.0` | Independent maintenance interval (seconds); `None` disables the periodic task |
+
+> `maintenance_interval=None` only disables the independent maintenance task; each
+> successful write still calls `sink.maintain()` afterwards.
+
+### AuditPayloadConfig Parameters
+
+| Parameter | Default | Description |
+| - | - | - |
+| `payload_mode` | `'digest'` | `'digest'`: size + SHA-256 only; `'full'`: also store the body |
+| `payload_allowlist` | `()` | Event names that keep the body (still subject to `payload_max_bytes`) |
+| `payload_max_bytes` | `64 * 1024` | Bodies above this size fall back to digest; `None` disables the limit |
+| `extra_fields` | `{}` | Static fields added to every record, e.g. `{"env": "prod"}` |
 
 ### Observability
 
 | Member | Description |
 | - | - |
 | `flush()` | Wait until queued records are written or downgraded |
-| `written_count` | Records successfully written to the sink |
-| `dropped_count` | Records dropped due to overflow or post-shutdown calls |
-| `write_error_count` | Failed write batches |
-| `fallback_count` | Records handed to the fallback callback |
-| `degraded` | Whether the sink is unavailable and only fallback is active |
-| `queue_size` | Current queue length |
+| `state` | Current state object; all counters and degradation info live on it |
+| `writer` | The underlying `AuditWriter` |
+| `sink` | The underlying `AuditSink` |
+
+Read counters directly from `middleware.state` (`written_count`, `dropped_count`,
+`write_error_count`, `fallback_count`); read queue depth from
+`middleware.writer.queue_size`. Configuration is accessed through
+`middleware.writer.config` and `middleware.writer.renderer.config`.
+
+### State machine
+
+The real transition logic lives in `AuditStateMachine` (`state_machine.py`);
+`AuditWriter` owns the queue, tasks, state machine, and sink I/O, while
+`AuditMiddleware` is only the publish-side facade. The state machine holds a single
+state object:
+
+| State | Meaning | State-specific fields |
+| - | - | - |
+| `RunningState` | Sink is available; normal writes | - |
+| `DegradedState` | Sink is unavailable; records go to fallback | `next_retry_at`, `backoff` |
+| `ClosingState` | Shutdown in progress; new records are dropped | - |
+| `ClosedState` | Shutdown finished | - |
+
+Shared counters live on `AuditState`; `inherit()` carries them across state transitions,
+and `match` statements drive the state-specific behavior. The clock is injectable, so
+backoff behavior can be tested synchronously.
 
 ### Failure and recovery
 
-1. If `on_setup` cannot open the sink (other than a missing dependency), the bus still
-   starts; records go to `fallback` and the sink is retried with exponential backoff.
-2. On a write failure, the middleware calls `sink.reclaim()` first to force space
+1. If `AuditWriter.start()` cannot open the sink (other than a missing dependency), the
+   writer still starts; records go to `fallback` and the sink is retried with exponential
+   backoff.
+2. On a write failure, the writer calls `sink.reclaim()` first to force space
    reclamation (bypassing the retention rate limit), then closes the sink and backs off;
    a successful `open()` restores normal writes.
 3. Retention runs on an independent maintenance task every `maintenance_interval`, not
    only after writes; idle services and persistent write failures still get cleaned up.
    If a write failure closed the sink, the maintenance task reopens it and keeps pruning.
 4. A `maintain()` failure is logged and never affects subsequent writes.
-5. Shutdown stops the maintenance task, drains the queue (`close_timeout`), then closes
-   the sink; `on_teardown` is idempotent.
+5. `AuditWriter.stop()` stops the maintenance task, drains the queue (`close_timeout`),
+   then closes the sink; `AuditMiddleware.on_teardown` delegates to it and is idempotent.
 6. Missing `aiosqlite` / `aiofiles` raises `ImportError` from `open()` and fails bus
    startup rather than silently degrading.
 
@@ -223,7 +296,7 @@ too much once AUTOINCREMENT leaves gaps. Deletions are followed by
 `PRAGMA incremental_vacuum`; legacy databases run a one-time `VACUUM` when
 `max_bytes` is first enabled (`vacuum=False` opts out).
 
-Cleanup does not depend on event writes: `AuditMiddleware` calls `sink.maintain()` every
+Cleanup does not depend on event writes: `AuditWriter` calls `sink.maintain()` every
 `maintenance_interval`, and on write failure it calls `sink.reclaim()` to bypass
 `prune_interval` and reclaim space immediately, avoiding a permanent disk-full loop.
 
@@ -232,7 +305,13 @@ Cleanup does not depend on event writes: `AuditMiddleware` calls `sink.maintain(
 ```python
 from collections.abc import Sequence
 
-from infinity_bus.templates.middlewares import AuditRecord, AuditSink
+from infinity_bus.templates.middlewares import (
+    AuditMiddleware,
+    AuditRecord,
+    AuditRecordRenderer,
+    AuditSink,
+    AuditWriter,
+)
 
 
 class PrintSink(AuditSink):
@@ -249,12 +328,16 @@ class PrintSink(AuditSink):
 
     async def close(self) -> None:
         pass
+
+
+writer = AuditWriter(PrintSink(), AuditRecordRenderer())
+middleware = AuditMiddleware(writer)
 ```
 
 A custom sink implements `open / write / close` and `is_open`; retries, backoff,
-queueing, and fallback stay in `AuditMiddleware`. Override `maintain()` for periodic
+queueing, and fallback stay in `AuditWriter`. Override `maintain()` for periodic
 housekeeping and `reclaim()` for a forced, rate-limit-free cleanup after write failures.
-The middleware serializes sink calls, so implementations do not need their own lock.
+The writer serializes sink calls, so implementations do not need their own lock.
 
 ## Migration from v6
 
@@ -262,19 +345,25 @@ The two old middlewares are removed (breaking):
 
 | v6 | New API |
 | - | - |
-| `JSONLLoggingMiddleware(path)` | `AuditMiddleware(JSONLSink(path))` |
-| `SQLiteLoggingMiddleware(path)` | `AuditMiddleware(SQLiteSink(path))` |
+| `JSONLLoggingMiddleware(path)` | `AuditMiddleware(AuditWriter(JSONLSink(path), AuditRecordRenderer()))` |
+| `SQLiteLoggingMiddleware(path)` | `AuditMiddleware(AuditWriter(SQLiteSink(path), AuditRecordRenderer()))` |
 | `serialize_data(data)` | Records use canonical JSON internally; use `json.dumps` when needed |
 | `LogFallback` | Still exported from `infinity_bus.templates` |
 
 Behavior changes:
 
-- The new API defaults to `payload_mode='digest'`; pass `payload_mode='full'` to keep bodies.
-- Writes are batched in the background; use `await middleware.flush()` in tests and at checkpoints.
+- Settings are split: `AuditWriterConfig` covers queue / batching / retry / lifecycle,
+  while `AuditPayloadConfig` covers payload recording. Pass each config to the module
+  that consumes it: writer and renderer respectively. Both are frozen and validated once.
+- The new API defaults to `payload_mode='digest'`; pass
+  `AuditPayloadConfig(payload_mode='full')` to the renderer to keep bodies.
+- Writes are batched in the background; use `await middleware.flush()` (or
+  `await writer.flush()`) in tests and at checkpoints.
 - The old `is_connect` permanent-failure bug is gone: `SQLiteSink.is_open` returns `False`
   after `close()`.
 
 ## Examples
 
-See `tests/templates/middlewares/audit/`: record building, the JSONL backend, SQLite retention and
-disk reclamation, plus batching / fallback / reconnect / shutdown draining in the middleware.
+See `tests/templates/middlewares/audit/` and `tests/templates/middlewares/audit/sinks/`:
+record building, the JSONL backend, SQLite retention and disk reclamation, plus
+writer / middleware batching, fallback, reconnect, and shutdown draining.

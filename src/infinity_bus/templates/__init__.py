@@ -24,8 +24,12 @@ from .idempotency import (
 )
 from .middlewares import (
     AuditMiddleware,
+    AuditPayloadConfig,
     AuditRecord,
+    AuditRecordRenderer,
     AuditSink,
+    AuditWriter,
+    AuditWriterConfig,
     BlockPredicate,
     EventBlockMiddleware,
     EventFilter,
@@ -79,8 +83,12 @@ __all__ = [
     'temporary_handler',
     # audit
     'AuditMiddleware',
+    'AuditPayloadConfig',
     'AuditRecord',
+    'AuditRecordRenderer',
     'AuditSink',
+    'AuditWriter',
+    'AuditWriterConfig',
     'JSONLSink',
     'SQLiteSink',
     'RetentionPolicy',

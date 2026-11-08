@@ -1,7 +1,11 @@
 from .audit import (
     AuditMiddleware,
+    AuditPayloadConfig,
     AuditRecord,
+    AuditRecordRenderer,
     AuditSink,
+    AuditWriter,
+    AuditWriterConfig,
     JSONLSink,
     LogFallback,
     PayloadMode,
@@ -30,8 +34,12 @@ from .recursion_guard import RecursionDetectedError, RecursionGuardMiddleware
 __all__ = [
     # 审计
     'AuditMiddleware',
+    'AuditPayloadConfig',
     'AuditRecord',
+    'AuditRecordRenderer',
     'AuditSink',
+    'AuditWriter',
+    'AuditWriterConfig',
     'JSONLSink',
     'SQLiteSink',
     'RetentionPolicy',

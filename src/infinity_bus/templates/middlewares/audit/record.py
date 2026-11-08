@@ -4,14 +4,13 @@ import hashlib
 import json
 import time
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from infinity_bus import Event
 
-PayloadMode = Literal['digest', 'full']
-"""负载记录模式：``digest`` 只存大小与摘要，``full`` 额外存正文。"""
+from .models import PayloadMode
 
 ERROR_EVENT_ID = 'ERROR'
 """发布失败记录使用的 ``event_id`` 占位值。"""

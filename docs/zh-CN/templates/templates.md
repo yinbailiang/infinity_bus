@@ -94,7 +94,8 @@ from infinity_bus.templates import (
     # queues（详见 queues/queues.md）
     'EventCodec', 'PayloadType', 'RabbitFanoutQueue',
     # audit（详见 middlewares/audit.md）
-    'AuditMiddleware', 'AuditRecord', 'AuditSink',
+    'AuditMiddleware', 'AuditPayloadConfig', 'AuditRecord', 'AuditRecordRenderer',
+    'AuditSink', 'AuditWriter', 'AuditWriterConfig',
     'JSONLSink', 'SQLiteSink',
     'RetentionPolicy', 'PayloadMode', 'LogFallback',
     # middlewares（详见中间件总览）
@@ -229,6 +230,8 @@ events.register_all_events(event_registry)
 ```python
 from infinity_bus.templates.middlewares import (
     AuditMiddleware,
+    AuditRecordRenderer,
+    AuditWriter,
     JSONLSink,
     MetricsMiddleware,
     RateLimitMiddleware,
@@ -237,5 +240,6 @@ from infinity_bus.templates.middlewares import (
 chain = MiddlewareChain()
 await chain.add(RateLimitMiddleware(max_per_second=100))
 await chain.add(MetricsMiddleware())
-await chain.add(AuditMiddleware(JSONLSink("events.jsonl")))
+audit_writer = AuditWriter(JSONLSink("events.jsonl"), AuditRecordRenderer())
+await chain.add(AuditMiddleware(audit_writer))
 ```

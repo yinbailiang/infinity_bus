@@ -7,7 +7,8 @@ import aiosqlite
 import pytest
 from pydantic import ValidationError
 
-from infinity_bus.templates.middlewares.audit import AuditRecord, RetentionPolicy, SQLiteSink
+from infinity_bus.templates.middlewares.audit import AuditRecord
+from infinity_bus.templates.middlewares.audit.sinks import RetentionPolicy, SQLiteSink
 
 
 def _record(

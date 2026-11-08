@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Callable
 
-from .record import AuditRecord
+from ..record import AuditRecord
 
 LogFallback = Callable[[str], None]
 """降级回调：接收一条 JSON 序列化的审计记录。"""

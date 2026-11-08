@@ -1,15 +1,21 @@
-"""统一审计日志系统：一个中间件 + 可插拔存储后端。"""
+"""统一审计日志系统：门面中间件 + 写入器 + 可插拔存储后端。"""
 
-from .jsonl import JSONLSink
+from .config import AuditPayloadConfig, AuditWriterConfig
 from .middleware import AuditMiddleware
-from .record import AuditRecord, PayloadMode
-from .sink import AuditSink, LogFallback
-from .sqlite import RetentionPolicy, SQLiteSink
+from .models import PayloadMode
+from .record import AuditRecord
+from .renderer import AuditRecordRenderer
+from .sinks import AuditSink, JSONLSink, LogFallback, RetentionPolicy, SQLiteSink
+from .writer import AuditWriter
 
 __all__ = [
     'AuditMiddleware',
+    'AuditPayloadConfig',
     'AuditRecord',
+    'AuditRecordRenderer',
     'AuditSink',
+    'AuditWriter',
+    'AuditWriterConfig',
     'JSONLSink',
     'LogFallback',
     'PayloadMode',

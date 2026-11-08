@@ -61,7 +61,7 @@ ignore-nested-functions = true
 
 | 指标 | 数值 |
 | - | - |
-| 公开 API docstring 覆盖 | **93.7%** |
+| 公开 API docstring 覆盖 | **94.3%** |
 | 最低阈值 | 60% |
 | 文档文件 | 58 篇 `.md` |
 
@@ -72,11 +72,11 @@ ignore-nested-functions = true
 ### 覆盖率
 
 ```text
-484 passed · 10 deselected(slow) · 0 failed · 14.2s
-总覆盖率: 93%（3037 statements / 203 missed）
+517 passed · 10 deselected(slow) · 0 failed · 14.5s
+总覆盖率: 94%（3174 statements / 204 missed）
 ```
 
-13 个模块达到 **100%** 覆盖，最低模块 85%（pipe）。
+20 个模块达到 **100%** 覆盖，最低模块 82%（audit writer）。
 
 ### 架构
 
@@ -102,9 +102,16 @@ tests/
     ├── middlewares/
     │   ├── audit/
     │   │   ├── audit_middleware_test.py
-    │   │   ├── jsonl_sink_test.py
+    │   │   ├── config_test.py
+    │   │   ├── models_test.py
     │   │   ├── record_test.py
-    │   │   └── sqlite_sink_test.py
+    │   │   ├── renderer_test.py
+    │   │   ├── state_machine_test.py
+    │   │   ├── writer_test.py
+    │   │   └── sinks/
+    │   │       ├── base_test.py
+    │   │       ├── jsonl_sink_test.py
+    │   │       └── sqlite_sink_test.py
     │   ├── event_block_test.py
     │   ├── event_forward_test.py
     │   ├── event_transform_test.py
@@ -163,9 +170,9 @@ uv run pre-commit run --all-files   # 手动全量运行
 
 | 指标 | 数值 |
 | - | - |
-| 最大单文件 | ~588 行 (`bus.py`) |
-| 模块平均 | ~199 行/文件 |
-| 生产文件数 | 33 个 `.py` |
+| 最大单文件 | ~708 行 (`bus.py`) |
+| 模块平均 | ~180 行/文件 |
+| 生产文件数 | 39 个 `.py` |
 
 每个文件一个职责，打开瞬间看完。新增功能不改旧代码。
 
@@ -195,11 +202,18 @@ src/infinity_bus/
     │   ├── __init__.py
     │   ├── audit/               统一审计日志
     │   │   ├── __init__.py
-    │   │   ├── middleware.py    AuditMiddleware
+    │   │   ├── config.py        AuditWriterConfig / AuditPayloadConfig
+    │   │   ├── middleware.py    AuditMiddleware（发布侧门面）
+    │   │   ├── models.py        状态机与队列条目类型
     │   │   ├── record.py        AuditRecord / 规范化序列化
-    │   │   ├── sink.py          AuditSink 接口
-    │   │   ├── jsonl.py         JSONL Sink
-    │   │   └── sqlite.py        SQLite Sink / 保留策略
+    │   │   ├── renderer.py      AuditRecordRenderer
+    │   │   ├── state_machine.py AuditStateMachine（纯状态迁移）
+    │   │   ├── writer.py        AuditWriter（队列 / 重试 / 任务）
+    │   │   └── sinks/           可插拔存储后端
+    │   │       ├── __init__.py
+    │   │       ├── base.py      AuditSink / LogFallback
+    │   │       ├── jsonl.py     JSONL Sink
+    │   │       └── sqlite.py    SQLite Sink / 保留策略
     │   ├── event_block.py       事件屏蔽
     │   ├── event_forward.py     事件转发
     │   ├── event_transform.py   事件转换

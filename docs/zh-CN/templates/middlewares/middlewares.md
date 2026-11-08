@@ -56,8 +56,12 @@ EventBus 提供了 7 个开箱即用的中间件，覆盖审计日志、指标�
 from infinity_bus.templates.middlewares import (
     # 审计
     AuditMiddleware,
+    AuditPayloadConfig,
     AuditRecord,
+    AuditRecordRenderer,
     AuditSink,
+    AuditWriter,
+    AuditWriterConfig,
     JSONLSink,
     SQLiteSink,
     RetentionPolicy,

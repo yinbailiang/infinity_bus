@@ -206,6 +206,8 @@ metrics = MetricsMiddleware(histogram_bounds=(0.01, 0.05, 0.1, 0.5, 1.0, 5.0))
 ```python
 from infinity_bus.templates.middlewares import (
     AuditMiddleware,
+    AuditRecordRenderer,
+    AuditWriter,
     JSONLSink,
     MetricsMiddleware,
     RateLimitMiddleware,
@@ -214,7 +216,8 @@ from infinity_bus.templates.middlewares import (
 chain = MiddlewareChain()
 await chain.add(RateLimitMiddleware(max_requests=100, window_seconds=1.0))
 await chain.add(metrics := MetricsMiddleware())
-await chain.add(AuditMiddleware(JSONLSink("events.jsonl")))
+audit_writer = AuditWriter(JSONLSink("events.jsonl"), AuditRecordRenderer())
+await chain.add(AuditMiddleware(audit_writer))
 
 # 执行顺序：限流 → 指标收集 → 审计
 # 指标会记录被限流拒绝的事件（计入 publish_total + publish_errors_total）

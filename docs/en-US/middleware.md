@@ -238,7 +238,8 @@ automatically.
 chain = bus_proxy.middleware
 
 # Hot-add — on_setup is called immediately
-await chain.add(AuditMiddleware(JSONLSink("events.jsonl")))
+audit_writer = AuditWriter(JSONLSink("events.jsonl"), AuditRecordRenderer())
+await chain.add(AuditMiddleware(audit_writer))
 
 # Hot-remove — on_teardown is called immediately
 # Note: in-flight chains may still invoke the middleware after this
@@ -399,7 +400,8 @@ class HotReloadHandler(EventHandler):
         chain = bus_proxy.middleware
 
         # Hot-add — on_setup is called immediately
-        await chain.add(AuditMiddleware(JSONLSink("events.jsonl")))
+        audit_writer = AuditWriter(JSONLSink("events.jsonl"), AuditRecordRenderer())
+        await chain.add(AuditMiddleware(audit_writer))
 
         # Hot-remove — on_teardown is called immediately
         # Note: in-flight chains may still invoke the middleware after this

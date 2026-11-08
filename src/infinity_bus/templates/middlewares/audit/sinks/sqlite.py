@@ -9,8 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .record import AuditRecord
-from .sink import AuditSink
+from ..record import AuditRecord
+from .base import AuditSink
 
 _aiosqlite: Any = None
 _aiosqlite_import_error: ImportError | None = None

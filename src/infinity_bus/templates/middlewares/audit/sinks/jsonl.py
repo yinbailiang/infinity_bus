@@ -7,8 +7,8 @@ import os
 from collections.abc import Sequence
 from typing import Any
 
-from .record import AuditRecord
-from .sink import AuditSink
+from ..record import AuditRecord
+from .base import AuditSink
 
 _aiofiles: Any = None
 _aiofiles_import_error: ImportError | None = None

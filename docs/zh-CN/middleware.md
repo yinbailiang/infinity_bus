@@ -366,7 +366,8 @@ class HotReloadHandler(EventHandler):
         chain = bus_proxy.middleware
 
         # 热添加 —— on_setup 立即被调用
-        await chain.add(AuditMiddleware(JSONLSink("events.jsonl")))
+        audit_writer = AuditWriter(JSONLSink("events.jsonl"), AuditRecordRenderer())
+        await chain.add(AuditMiddleware(audit_writer))
 
         # 热移除 —— on_teardown 立即被调用
         # 注意：已在飞的链仍可能调用该中间件，见 Middleware.on_teardown 文档
