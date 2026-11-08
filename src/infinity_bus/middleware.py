@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
@@ -311,7 +312,7 @@ class MiddlewareChain:
             for mw in list(self._middlewares):  # 快照：允许 on_setup 内嵌套变更
                 attempted.append(mw)
                 await mw.on_setup(bus)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             self._bus = None
             for mw in reversed(attempted):
                 try:
