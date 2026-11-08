@@ -9,7 +9,12 @@ from infinity_bus.templates.middlewares.audit import AuditRecord
 from infinity_bus.templates.middlewares.audit.sinks import JSONLSink
 
 
-def _record(*, name: str = 'mw.ping', extra: dict[str, object] | None = None) -> AuditRecord:
+def _record(
+    *,
+    name: str = 'mw.ping',
+    extra: dict[str, object] | None = None,
+    payload_unrenderable: dict[str, str] | None = None,
+) -> AuditRecord:
     return AuditRecord(
         ts=1.0,
         emitted_at=1.0,
@@ -22,6 +27,7 @@ def _record(*, name: str = 'mw.ping', extra: dict[str, object] | None = None) ->
         payload_size=7,
         payload_sha256='abc',
         data='{"a":1}',
+        payload_unrenderable={} if payload_unrenderable is None else payload_unrenderable,
         extra={} if extra is None else extra,
     )
 
@@ -85,6 +91,21 @@ async def test_open_and_close_are_idempotent(tmp_path) -> None:
     await sink.close()
     assert not sink.is_open
     assert sink.file_path.endswith('audit.jsonl')
+
+
+@pytest.mark.asyncio
+async def test_payload_unrenderable_is_written_as_top_level_key(tmp_path) -> None:
+    """不可渲染字段作为独立顶层键写入，不混入 data。"""
+    path = str(tmp_path / 'audit.jsonl')
+    sink = JSONLSink(path)
+    await sink.open()
+    await sink.write([_record(payload_unrenderable={'<0>': 'builtins.object: repr'})])
+    await sink.close()
+
+    lines = await asyncio.to_thread(_read_lines, path)
+    row = json.loads(lines[0])
+    assert row['payload_unrenderable'] == {'<0>': 'builtins.object: repr'}
+    assert row['data'] == '{"a":1}'
 
 
 @pytest.mark.asyncio

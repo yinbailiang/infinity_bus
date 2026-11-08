@@ -36,6 +36,7 @@ _CORE_COLUMNS: tuple[str, ...] = (
     'payload_size',
     'payload_sha256',
     'data',
+    'payload_unrenderable',
     'error',
 )
 
@@ -53,6 +54,7 @@ _MIGRATION_COLUMNS: dict[str, str] = {
     'payload_size': 'INTEGER NOT NULL DEFAULT 0',
     'payload_sha256': 'TEXT',
     'data': 'TEXT',
+    'payload_unrenderable': 'TEXT',
     'error': 'TEXT',
 }
 
@@ -228,6 +230,7 @@ CREATE TABLE IF NOT EXISTS {self._table} (
     payload_size   INTEGER NOT NULL DEFAULT 0,
     payload_sha256 TEXT,
     data           TEXT,
+    payload_unrenderable TEXT,
     error          TEXT{extra}
 )"""
 
@@ -269,6 +272,7 @@ CREATE TABLE IF NOT EXISTS {self._table} (
             record.payload_size,
             record.payload_sha256,
             record.data,
+            json.dumps(record.payload_unrenderable, ensure_ascii=False, sort_keys=True),
             record.error,
             *(self._bind_extra(record.extra.get(name)) for name in self._extra_names),
         )

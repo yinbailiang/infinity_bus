@@ -1,5 +1,6 @@
 """SQLite 审计存储后端测试。"""
 
+import json
 import time
 from typing import Any
 
@@ -17,6 +18,7 @@ def _record(
     ts: float | None = None,
     data: str | None = '{"a":1}',
     extra: dict[str, Any] | None = None,
+    payload_unrenderable: dict[str, str] | None = None,
 ) -> AuditRecord:
     return AuditRecord(
         ts=time.time() if ts is None else ts,
@@ -30,6 +32,7 @@ def _record(
         payload_size=7,
         payload_sha256='abc',
         data=data,
+        payload_unrenderable={} if payload_unrenderable is None else payload_unrenderable,
         extra={} if extra is None else extra,
     )
 
@@ -89,7 +92,20 @@ CREATE TABLE event_log (
     rows = await _fetch_all(sink, 'SELECT name FROM event_log ORDER BY id')
     assert [row['name'] for row in rows] == ['old', 'new']
     columns = await _fetch_all(sink, 'PRAGMA table_info(event_log)')
-    assert 'payload_sha256' in {row['name'] for row in columns}
+    names = {row['name'] for row in columns}
+    assert 'payload_sha256' in names
+    assert 'payload_unrenderable' in names
+    await sink.close()
+
+
+@pytest.mark.asyncio
+async def test_payload_unrenderable_is_stored(tmp_path) -> None:
+    """不可渲染字段以 JSON 存入独立列。"""
+    sink = SQLiteSink(str(tmp_path / 'audit.db'))
+    await sink.open()
+    await sink.write([_record(payload_unrenderable={'<0>': 'builtins.object: repr'})])
+    rows = await _fetch_all(sink, 'SELECT payload_unrenderable FROM event_log')
+    assert json.loads(rows[0]['payload_unrenderable']) == {'<0>': 'builtins.object: repr'}
     await sink.close()
 
 

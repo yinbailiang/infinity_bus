@@ -127,14 +127,14 @@ Pydantic 模型，构造时一次校验。
 | - | - | - |
 | `payload_mode` | `'digest'` | `'digest'` 只存大小与 SHA-256；`'full'` 额外存正文 |
 | `payload_allowlist` | `()` | 事件名白名单，命中时保留正文（仍受 `payload_max_bytes` 限制） |
-| `payload_max_bytes` | `64 * 1024` | 正文超过此值时只保留摘要；`None` 表示不限制 |
+| `payload_max_bytes` | `64 * 1024` | 正文与 `payload_unrenderable` 合计超过此值时只保留摘要；`None` 表示不限制 |
 | `extra_fields` | `{}` | 每条记录追加的静态字段，例如 `{"env": "prod"}` |
 
 ### 观测
 
 | 属性 / 方法 | 说明 |
 | - | - |
-| `flush()` | 等待当前队列中的记录全部落库或降级 |
+| `flush()` | 等待当前队列中的记录全部落库或降级；返回仍未完成的记录数（writer 未启动/已结束时直接返回队列长度） |
 | `state` | 当前状态对象；计数器与降级信息都在其中 |
 | `writer` | 底层 `AuditWriter` |
 | `sink` | 底层 `AuditSink` |
@@ -189,13 +189,17 @@ Pydantic 模型，构造时一次校验。
 | `sources` | 事件来源链 |
 | `timestamps` | 逐跳时间戳（ISO 8601） |
 | `payload_size` | 负载 UTF-8 字节数 |
-| `payload_sha256` | 负载规范化 JSON 的 SHA-256 |
+| `payload_sha256` | 负载规范化 JSON 的 SHA-256（不可渲染字段以占位符参与） |
 | `data` | 负载正文；按模式 / 白名单 / 上限决定是否填充 |
+| `payload_unrenderable` | 不可渲染字段的旁路存储：占位符 -> `类型: 字符串表示`；仅保留正文时填充 |
 | `error` | 发布失败描述 |
 | `extra` | 调用方追加的静态字段 |
 
-负载使用键序稳定的紧凑 JSON 序列化；保留正文时满足
-`sha256(data.encode('utf-8')) == payload_sha256`。
+负载使用键序稳定的紧凑 JSON 序列化。不可 JSON 渲染的值（任意对象、`bytes`、
+`set`、循环引用等）会在原位置替换为 `<0>`、`<1>`… 占位符，真实值存入
+`payload_unrenderable`；占位符按确定性遍历顺序编号，因此同一逻辑负载的摘要
+跨进程稳定。保留正文时满足
+`sha256(data.encode('utf-8')) == payload_sha256`，且 `data` 始终是合法 JSON。
 
 ## 存储后端
 
@@ -273,6 +277,7 @@ CREATE TABLE IF NOT EXISTS event_log (
     payload_size   INTEGER NOT NULL DEFAULT 0,
     payload_sha256 TEXT,
     data           TEXT,
+    payload_unrenderable TEXT,
     error          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_event_log_ts ON event_log(ts);

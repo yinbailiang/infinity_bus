@@ -62,13 +62,50 @@ async def test_writer_enqueue_and_flush() -> None:
     writer = AuditWriter(sink, AuditRecordRenderer(), AuditWriterConfig(flush_interval=0))
     await writer.start()
     writer.enqueue(PendingEvent(_event()))
-    await writer.flush()
+    assert await writer.flush() == 0
     assert len(sink.records) == 1
     assert writer.state.written_count == 1
 
     await writer.stop()
     assert isinstance(writer.state, ClosedState)
     assert not sink.is_open
+
+
+@pytest.mark.asyncio
+async def test_flush_before_start_reports_pending_count() -> None:
+    """writer 未启动时 flush 返回未处理记录数，而不是静默成功。"""
+    sink = _Sink()
+    writer = AuditWriter(sink, AuditRecordRenderer(), AuditWriterConfig(flush_interval=0))
+    writer.enqueue(PendingEvent(_event()))
+    assert await writer.flush() == 1
+    assert not sink.records
+
+    await writer.start()
+    assert await writer.flush() == 0
+    assert len(sink.records) == 1
+    await writer.stop()
+
+
+@pytest.mark.asyncio
+async def test_flush_after_writer_task_done_reports_pending_count() -> None:
+    """writer 任务意外结束后，flush 仍会报告队列中的未完成记录。"""
+    sink = _Sink()
+    writer = AuditWriter(
+        sink,
+        AuditRecordRenderer(),
+        AuditWriterConfig(flush_interval=0, maintenance_interval=None),
+    )
+    await writer.start()
+    task = writer._writer_task  # pyright: ignore[reportPrivateUsage]
+    assert task is not None
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    writer.enqueue(PendingEvent(_event()))
+    assert await writer.flush() == 1
+    assert not sink.records
+    await writer.stop()
+    assert writer.queue_size == 0
 
 
 @pytest.mark.asyncio

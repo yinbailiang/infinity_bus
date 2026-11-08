@@ -79,9 +79,9 @@ class AuditMiddleware(Middleware):
             )
         )
 
-    async def flush(self) -> None:
-        """等待 writer 队列中的记录全部写入或降级。"""
-        await self._writer.flush()
+    async def flush(self) -> int:
+        """等待 writer 队列中的记录全部写入或降级，返回仍未完成的记录数。"""
+        return await self._writer.flush()
 
     @property
     def writer(self) -> AuditWriter:

@@ -131,14 +131,14 @@ belong to `AuditWriterConfig`; payload rendering settings belong to
 | - | - | - |
 | `payload_mode` | `'digest'` | `'digest'`: size + SHA-256 only; `'full'`: also store the body |
 | `payload_allowlist` | `()` | Event names that keep the body (still subject to `payload_max_bytes`) |
-| `payload_max_bytes` | `64 * 1024` | Bodies above this size fall back to digest; `None` disables the limit |
+| `payload_max_bytes` | `64 * 1024` | Body plus `payload_unrenderable` above this size falls back to digest; `None` disables the limit |
 | `extra_fields` | `{}` | Static fields added to every record, e.g. `{"env": "prod"}` |
 
 ### Observability
 
 | Member | Description |
 | - | - |
-| `flush()` | Wait until queued records are written or downgraded |
+| `flush()` | Wait until queued records are written or downgraded; returns the number of unfinished records (returns the queue length directly when the writer is not running) |
 | `state` | Current state object; all counters and degradation info live on it |
 | `writer` | The underlying `AuditWriter` |
 | `sink` | The underlying `AuditSink` |
@@ -199,13 +199,18 @@ backoff behavior can be tested synchronously.
 | `sources` | Event source chain |
 | `timestamps` | Per-hop timestamps (ISO 8601) |
 | `payload_size` | UTF-8 byte length of the payload |
-| `payload_sha256` | SHA-256 of the canonical JSON payload |
+| `payload_sha256` | SHA-256 of the canonical JSON payload (unrenderable values participate as placeholders) |
 | `data` | Payload body, depending on mode / allowlist / size limit |
+| `payload_unrenderable` | Side-channel storage for unrenderable values: placeholder -> `type: string form`; only filled when the body is kept |
 | `error` | Publish failure description |
 | `extra` | Static fields supplied by the caller |
 
-Payloads use canonical, key-sorted compact JSON. When the body is stored,
-`sha256(data.encode('utf-8')) == payload_sha256`.
+Payloads use canonical, key-sorted compact JSON. Values that cannot be rendered as JSON
+(arbitrary objects, `bytes`, `set`, circular references, ...) are replaced in place with
+`<0>`, `<1>`, ... placeholders and stored in `payload_unrenderable`; placeholders are
+numbered in a deterministic traversal order, so the digest of the same logical payload is
+stable across processes. When the body is stored,
+`sha256(data.encode('utf-8')) == payload_sha256` and `data` is always valid JSON.
 
 ## Sinks
 
@@ -285,6 +290,7 @@ CREATE TABLE IF NOT EXISTS event_log (
     payload_size   INTEGER NOT NULL DEFAULT 0,
     payload_sha256 TEXT,
     data           TEXT,
+    payload_unrenderable TEXT,
     error          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_event_log_ts ON event_log(ts);

@@ -142,12 +142,17 @@ class AuditWriter:
     # 观测
     # ------------------------------------------------------------------
 
-    async def flush(self) -> None:
-        """等待当前队列中的记录全部写入或降级。"""
+    async def flush(self) -> int:
+        """等待当前队列中的记录全部写入或降级，返回仍未完成的记录数。
+
+        writer 未启动或已结束时没有消费者，直接返回当前队列长度，避免把
+        未处理记录误报为已落库；调用方可据此决定是否启动 / 重启 writer。
+        """
         task = self._writer_task
-        if task is None or task.done():
-            return
+        if task is None or task.done() or task is asyncio.current_task():
+            return self._queue.qsize()
         await self._queue.join()
+        return self._queue.qsize()
 
     @property
     def sink(self) -> AuditSink:

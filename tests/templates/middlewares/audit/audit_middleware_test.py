@@ -132,7 +132,7 @@ async def test_published_event_is_recorded(
     )
     async with event_bus:
         await event_bus.proxy('src').publish('mw.ping', {'key': 'k', 'count': 1})
-        await middleware.flush()
+        assert await middleware.flush() == 0
         records = [record for record in sink.records if record.name == 'mw.ping']
         assert len(records) == 1
         assert records[0].service == 'src'
