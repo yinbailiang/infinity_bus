@@ -4,7 +4,7 @@ from abc import ABC
 from datetime import datetime
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SerializeAsAny
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ class Event(BaseModel):
     """事件数据类"""
 
     name: str = Field(description='事件类型')
-    data: BaseModel | None = Field(default=None, description='事件附加数据')
+    data: SerializeAsAny[BaseModel] | None = Field(default=None, description='事件附加数据（序列化保留具体负载字段）')
 
     # metadata
     id: str = Field(default_factory=lambda: uuid.uuid4().hex, description='事件UUID')

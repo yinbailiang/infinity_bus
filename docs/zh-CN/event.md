@@ -12,9 +12,9 @@
 
 ```python
 class Event(BaseModel):
-    name: str                           # 事件类型名
-    data: BaseModel | None = None       # 负载数据（Pydantic 模型实例）
-    id: str                             # 事件 UUID（自动生成）
+    name: str                                   # 事件类型名
+    data: SerializeAsAny[BaseModel] | None = None  # 负载数据（序列化保留具体类型字段）
+    id: str                                     # 事件 UUID（自动生成）
     sources: list[str]                  # 处理链来源记录
     timestamps: list[datetime]          # 各环节时间戳
     event_ids: list[str]                # 事件链 UUID
@@ -23,11 +23,13 @@ class Event(BaseModel):
 | 字段 | 类型 | 说明 |
 | - | - | - |
 | `name` | `str` | 事件类型名称，对应 `EventDeclaration.name`。 |
-| `data` | `BaseModel \| None` | 发布时传入的负载数据。无负载事件为 `None`。 |
+| `data` | `SerializeAsAny[BaseModel] \| None` | 发布时传入的负载数据。无负载事件为 `None`；序列化时保留具体负载类型字段。 |
 | `id` | `str` | 事件唯一标识（UUID hex），自动生成。 |
 | `sources` | `list[str]` | 事件经过的处理节点名称列表，用于追踪处理链。 |
 | `timestamps` | `list[datetime]` | 每个处理节点的时间戳列表，与 `sources` 一一对应。 |
 | `event_ids` | `list[str]` | 事件链中所有事件的列表（包括自己），用于追踪因果。 |
+
+> `Event.model_dump()` / `model_dump_json()` 会保留具体 `BaseModel` 子类的字段，不再退化为空对象；跨进程线格式仍建议使用 `EventCodec`。
 
 ---
 
