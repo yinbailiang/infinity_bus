@@ -1,11 +1,12 @@
 # Commit Log — `infinity_bus`
 
-> 共 **172** 个提交 · 29 个版本标签 · 2026-06-07 ~ 2026-11-09
+> 共 **180** 个提交 · 30 个版本标签 · 2026-06-07 ~ 2026-11-09
 
 ## 版本标签
 
 | Tag | Commit |
 | --- | ------ |
+| `v7.0.1` | `3c4d520` |
 | `v7.0.0` | `8ee216a` |
 | `v6.2.0` | `e6238fb` |
 | `v6.1.0` | `3d15097` |
@@ -41,6 +42,27 @@
 ## 全部提交
 
 ### 2026-11-09
+
+- **`3c4d520`** `chore: bump version to 7.0.1`
+  - Version bumped 7.0.0 -> 7.0.1 (patch: cancellation-safe shutdown/start, PEP 563 local payload annotations, OTel gauge collection, Event payload serialization)
+
+- **`69aa8bd`** `Merge PR #12: fix: harden lifecycle shutdown/start and template edge cases`
+  - Best-effort and cancellation-safe `stop()` / `start()` rollback; PEP 563 annotations; OTel observable gauge callbacks; `Event.model_dump()` payload preservation; follow-up cancellation and local-class fixes
+
+- **`f73b4e5`** `fix(templates): resolve local PEP 563 payload annotations`
+  - Fall back to payload class `__name__` / `__qualname__` when `get_type_hints()` cannot see enclosing locals
+
+- **`96ecca3`** `fix(bus): close remaining shutdown cancellation gaps`
+  - Clear the publish gate on every `stop()` exit path; clear handler binding in `deactivate()` finally; always tear down middleware; use `asyncio.wait` so outer cancellation propagates
+
+- **`59a4c71`** `fix(event): preserve concrete payload when serializing`
+  - `Event.data` uses `SerializeAsAny[BaseModel]` so `model_dump()` / `model_dump_json()` keep concrete payload fields
+
+- **`e7df61e`** `fix(templates): resolve PEP 563 annotations and OTel gauge callbacks`
+  - Resolve string annotations with `get_type_hints()`; return iterable `Observation` lists from observable gauge callbacks
+
+- **`03259bc`** `fix(bus): make shutdown and cancelled startup rollback-safe`
+  - Best-effort shutdown cleanup with cancellation rollback for middleware setup and handler activation
 
 - **`8ee216a`** `chore: bump version to 7.0.0`
   - Version bumped 6.2.0 -> 7.0.0 (major: unified audit logging replaces `JSONLLoggingMiddleware` / `SQLiteLoggingMiddleware`; stable payload digests; `flush()` reports unfinished records)
