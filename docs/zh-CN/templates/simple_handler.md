@@ -51,6 +51,7 @@ def handler(
 - 有负载事件 + 无参数函数 → 立即抛出 `TypeError`
 - 无负载事件 + 有参数函数 → 立即抛出 `TypeError`
 - 有负载事件 + 参数类型不匹配 → 立即抛出 `TypeError`（仅当参数有类型注解时）
+- 支持 `from __future__ import annotations`（PEP 563）：字符串注解会先解析为真实类型，再执行上述校验
 
 ---
 

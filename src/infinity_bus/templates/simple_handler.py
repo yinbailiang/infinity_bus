@@ -2,7 +2,7 @@
 
 from collections.abc import Awaitable, Callable
 from inspect import isawaitable, signature
-from typing import Any, cast
+from typing import Any, cast, get_type_hints
 
 from pydantic import BaseModel
 
@@ -41,6 +41,11 @@ def handler(
                 )
             else:
                 first_annotation = params[0].annotation
+                if isinstance(first_annotation, str):
+                    try:
+                        first_annotation = get_type_hints(func).get(params[0].name, first_annotation)
+                    except Exception:
+                        pass  # 无法解析的注解保持原样，交给下面的类型校验报错
                 if first_annotation is not sig.empty and first_annotation is not event_decl.payload_type:
                     raise TypeError(
                         f'处理器 {func.__name__} 参数类型应为 {event_decl.payload_type.__name__}，'

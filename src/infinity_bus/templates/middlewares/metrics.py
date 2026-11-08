@@ -435,8 +435,8 @@ class MetricsMiddleware(Middleware):
         )
 
         # Gauge 通过回调函数采集
-        def _queue_callback(options: Any) -> Any:
-            return otel_metrics.Observation(self._bus.queue_size if self._bus else 0)
+        def _queue_callback(options: Any) -> list[Any]:
+            return [otel_metrics.Observation(self._bus.queue_size if self._bus else 0)]
 
         self._otel_queue_gauge = meter.create_observable_gauge(
             'infinity_bus.queue_size',
@@ -444,8 +444,8 @@ class MetricsMiddleware(Middleware):
             callbacks=[_queue_callback],
         )
 
-        def _tasks_callback(options: Any) -> Any:
-            return otel_metrics.Observation(self._bus.active_task_count if self._bus else 0)
+        def _tasks_callback(options: Any) -> list[Any]:
+            return [otel_metrics.Observation(self._bus.active_task_count if self._bus else 0)]
 
         self._otel_tasks_gauge = meter.create_observable_gauge(
             'infinity_bus.active_tasks',
