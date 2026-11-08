@@ -97,6 +97,264 @@ async def test_double_start_stop(event_bus_factory: Callable[..., EventBus]):
     assert not bus.is_running
 
 
+class _ShutdownPublishBoomMiddleware(Middleware):
+    """在停机事件发布时抛错，用于验证 stop() 的兜底清理。"""
+
+    async def before_publish(
+        self,
+        event_registry: EventRegistry,
+        name: str,
+        source: str,
+        data: dict[str, Any] | BaseModel | None,
+        old_event: Event | None,
+        next: BeforePublishNext,
+    ) -> None:
+        if name == ShutdownEvent.name:
+            raise RuntimeError('shutdown boom')
+        await next(event_registry, name, source, data, old_event)
+
+    async def on_publish(self, event: Event, next: OnPublishNext) -> None:
+        await next(event)
+
+
+class _JoinBoomQueue(InMemoryEventQueue):
+    """join() 抛错的自定义队列，用于验证 stop() 不因队列异常中断清理。"""
+
+    async def join(self) -> None:
+        raise RuntimeError('join boom')
+
+
+@pytest.mark.asyncio
+async def test_stop_cleans_up_when_shutdown_publish_fails(
+    event_bus_factory: Callable[..., EventBus],
+) -> None:
+    """停机事件发布失败时，stop() 仍应完成调度/处理器/中间件清理。"""
+    teardowns: list[str] = []
+
+    class _TeardownSpyMiddleware(_ShutdownPublishBoomMiddleware):
+        async def on_teardown(self, bus: EventBus) -> None:
+            teardowns.append('mw.on_teardown')
+
+    chain = MiddlewareChain()
+    await chain.add(_TeardownSpyMiddleware())
+    hreg = EventHandlerRegistry()
+    await hreg.register(CountingHandler())
+    bus = event_bus_factory(h_registry=hreg, middleware_chain=chain)
+    await bus.start()
+
+    await bus.stop()  # 不得向外抛错
+
+    assert not bus.is_running
+    assert not bus.is_publishing_enabled
+    assert bus._dispatch_task is None  # pyright: ignore[reportPrivateUsage]
+    assert hreg._bus is None  # pyright: ignore[reportPrivateUsage]
+    assert teardowns == ['mw.on_teardown']
+
+
+@pytest.mark.asyncio
+async def test_stop_cleans_up_when_queue_join_fails(
+    event_bus_factory: Callable[..., EventBus],
+) -> None:
+    """自定义队列 join() 抛错时，stop() 仍应完成其余清理。"""
+    hreg = EventHandlerRegistry()
+    await hreg.register(CountingHandler())
+    bus = event_bus_factory(
+        h_registry=hreg,
+        queue=_JoinBoomQueue(InMemoryEventQueueConfig(maxsize=10)),
+    )
+    await bus.start()
+
+    await bus.stop()  # 不得向外抛错
+
+    assert not bus.is_running
+    assert not bus.is_publishing_enabled
+    assert bus._dispatch_task is None  # pyright: ignore[reportPrivateUsage]
+    assert hreg._bus is None  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stop_still_cleans_up(
+    base_event_registry: EventRegistry,
+    handler_registry: EventHandlerRegistry,
+) -> None:
+    """stop() 被取消时也必须完成调度/任务/处理器清理，并继续传播取消。"""
+    handler = BlockingHandler(subscriptions=['test.block'])
+    await handler_registry.register(handler)
+    bus = EventBus(
+        base_event_registry,
+        handler_registry,
+        queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+        max_handler_semaphore=2,
+        shutdown=ShutdownConfig(tasks_timeout=0.1),
+    )
+    await bus.start()
+    await bus.proxy('p').publish('test.block', None)
+    await handler.wait_started()
+
+    stop_task = asyncio.create_task(bus.stop())
+    await asyncio.sleep(0)
+    stop_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await stop_task
+
+    assert not bus.is_running
+    assert not bus.is_publishing_enabled
+    assert bus._dispatch_task is None  # pyright: ignore[reportPrivateUsage]
+    assert handler_registry._bus is None  # pyright: ignore[reportPrivateUsage]
+
+
+class _BlockingShutdownPublishMiddleware(Middleware):
+    """在 ShutdownEvent 发布阶段阻塞，用于把取消点固定在该窗口。"""
+
+    def __init__(self) -> None:
+        self.entered = asyncio.Event()
+
+    async def before_publish(
+        self,
+        event_registry: EventRegistry,
+        name: str,
+        source: str,
+        data: dict[str, Any] | BaseModel | None,
+        old_event: Event | None,
+        next: BeforePublishNext,
+    ) -> None:
+        if name == ShutdownEvent.name:
+            self.entered.set()
+            await asyncio.Event().wait()
+        await next(event_registry, name, source, data, old_event)
+
+    async def on_publish(self, event: Event, next: OnPublishNext) -> None:
+        await next(event)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stop_during_shutdown_publish_disables_publishing(
+    base_event_registry: EventRegistry,
+    handler_registry: EventHandlerRegistry,
+) -> None:
+    """停机事件发布阶段取消 stop()：仍须关闭发布闸门并完成清理。"""
+    mw = _BlockingShutdownPublishMiddleware()
+    chain = MiddlewareChain()
+    await chain.add(mw)
+    bus = EventBus(
+        base_event_registry,
+        handler_registry,
+        queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+        middleware_chain=chain,
+    )
+    await bus.start()
+
+    stop_task = asyncio.create_task(bus.stop())
+    await mw.entered.wait()
+    stop_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await stop_task
+
+    assert not bus.is_running
+    assert not bus.is_publishing_enabled
+    assert bus._dispatch_task is None  # pyright: ignore[reportPrivateUsage]
+    assert handler_registry._bus is None  # pyright: ignore[reportPrivateUsage]
+
+
+class _BlockingDeactivateHandler(EventHandler):
+    """首次 on_deactivate 阻塞，用于把取消点固定在 handler 下线阶段。"""
+
+    def __init__(self) -> None:
+        super().__init__(['test.event'])
+        self.entered = asyncio.Event()
+        self.block = True
+
+    async def on_deactivate(self, bus: EventBus) -> None:
+        if self.block:
+            self.block = False
+            self.entered.set()
+            await asyncio.Event().wait()
+        await super().on_deactivate(bus)
+
+    async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stop_during_handler_deactivation_clears_bindings(
+    base_event_registry: EventRegistry,
+) -> None:
+    """handler 下线阶段取消 stop()：registry/middleware 解绑且可重试 start。"""
+    teardowns: list[str] = []
+
+    class _TeardownSpyMiddleware(Middleware):
+        async def on_teardown(self, bus: EventBus) -> None:
+            teardowns.append('mw.on_teardown')
+
+        async def before_publish(
+            self,
+            event_registry: EventRegistry,
+            name: str,
+            source: str,
+            data: dict[str, Any] | BaseModel | None,
+            old_event: Event | None,
+            next: BeforePublishNext,
+        ) -> None:
+            await next(event_registry, name, source, data, old_event)
+
+        async def on_publish(self, event: Event, next: OnPublishNext) -> None:
+            await next(event)
+
+    chain = MiddlewareChain()
+    await chain.add(_TeardownSpyMiddleware())
+    hreg = EventHandlerRegistry()
+    handler = _BlockingDeactivateHandler()
+    await hreg.register(handler)
+    bus = EventBus(
+        base_event_registry,
+        hreg,
+        queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+        middleware_chain=chain,
+    )
+    await bus.start()
+
+    stop_task = asyncio.create_task(bus.stop())
+    await handler.entered.wait()
+    stop_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await stop_task
+
+    assert not bus.is_running
+    assert not bus.is_publishing_enabled
+    assert bus._dispatch_task is None  # pyright: ignore[reportPrivateUsage]
+    assert hreg._bus is None  # pyright: ignore[reportPrivateUsage]
+    assert chain._bus is None  # pyright: ignore[reportPrivateUsage]
+    assert teardowns == ['mw.on_teardown']
+
+    await bus.start()
+    assert bus.is_running
+    await bus.stop()
+
+
+@pytest.mark.asyncio
+async def test_cancel_dispatch_best_effort_propagates_outer_cancellation() -> None:
+    """安全取消 dispatch task 时，外层取消不能被吞掉。"""
+    bus = EventBus(EventRegistry(), EventHandlerRegistry())
+    child_started = asyncio.Event()
+
+    async def stubborn_dispatch() -> None:
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            child_started.set()
+            await asyncio.sleep(0.05)
+            raise
+
+    bus._dispatch_task = asyncio.create_task(stubborn_dispatch())  # pyright: ignore[reportPrivateUsage]
+    await asyncio.sleep(0)
+    waiter = asyncio.create_task(bus._cancel_dispatch_best_effort())  # pyright: ignore[reportPrivateUsage]
+    await child_started.wait()
+    waiter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiter
+    await asyncio.wait({bus._dispatch_task})  # pyright: ignore[reportPrivateUsage]
+
+
 @pytest.mark.asyncio
 async def test_context_manager(event_bus_factory: Callable[..., EventBus]):
     """验证 async with 上下文管理器"""
@@ -499,6 +757,107 @@ async def test_start_rolls_back_when_middleware_setup_fails(event_bus_factory: C
     await wait_for_condition(lambda: good.count == 1)
     await bus.stop()
     assert good.count == 1
+
+
+class _CancelOnActivateHandler(EventHandler):
+    """首次 on_activate 阻塞，用于验证 start() 取消后的回滚与重试。"""
+
+    def __init__(self) -> None:
+        super().__init__(['test.event'])
+        self.activations = 0
+        self.first_activation = asyncio.Event()
+
+    async def on_activate(self, bus: EventBus) -> None:
+        self.activations += 1
+        if self.activations == 1:
+            await self.first_activation.wait()
+        await super().on_activate(bus)
+
+    async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_cancelled_start_during_handler_activation_rolls_back_and_retries(
+    event_bus_factory: Callable[..., EventBus],
+) -> None:
+    """激活阶段取消 start() → 注册表/中间件解绑，随后可成功重试。"""
+    hreg = EventHandlerRegistry()
+    handler = _CancelOnActivateHandler()
+    await hreg.register(handler)
+    chain = MiddlewareChain()
+    bus = event_bus_factory(h_registry=hreg, middleware_chain=chain)
+
+    task = asyncio.create_task(bus.start())
+    await wait_for_condition(lambda: handler.activations == 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert not bus.is_running
+    assert not bus.is_publishing_enabled
+    assert hreg._bus is None  # pyright: ignore[reportPrivateUsage]
+    assert chain._bus is None  # pyright: ignore[reportPrivateUsage]
+
+    await bus.start()
+    assert bus.is_running
+    await bus.stop()
+
+
+class _CancelOnSetupMiddleware(Middleware):
+    """首次 on_setup 阻塞，用于验证 start() 在中间件初始化阶段取消后的回滚。"""
+
+    def __init__(self) -> None:
+        self.setups = 0
+        self.first_setup = asyncio.Event()
+
+    async def on_setup(self, bus: EventBus) -> None:
+        self.setups += 1
+        if self.setups == 1:
+            await self.first_setup.wait()
+
+    async def before_publish(
+        self,
+        event_registry: EventRegistry,
+        name: str,
+        source: str,
+        data: dict[str, Any] | BaseModel | None,
+        old_event: Event | None,
+        next: BeforePublishNext,
+    ) -> None:
+        await next(event_registry, name, source, data, old_event)
+
+    async def on_publish(self, event: Event, next: OnPublishNext) -> None:
+        await next(event)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_start_during_middleware_setup_rolls_back_and_retries(
+    event_bus_factory: Callable[..., EventBus],
+) -> None:
+    """中间件初始化阶段取消 start() → 链解绑，随后可成功重试。"""
+    mw = _CancelOnSetupMiddleware()
+    chain = MiddlewareChain()
+    await chain.add(mw)
+    hreg = EventHandlerRegistry()
+    await hreg.register(CountingHandler())
+    bus = event_bus_factory(h_registry=hreg, middleware_chain=chain)
+
+    task = asyncio.create_task(bus.start())
+    await wait_for_condition(lambda: mw.setups == 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert not bus.is_running
+    assert not bus.is_publishing_enabled
+    assert chain._bus is None  # pyright: ignore[reportPrivateUsage]
+    assert hreg._bus is None  # pyright: ignore[reportPrivateUsage]
+
+    await bus.start()
+    assert mw.setups == 2
+    assert bus.is_running
+    await bus.stop()
 
 
 # ============================================================================

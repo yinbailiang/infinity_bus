@@ -13,9 +13,9 @@ Runtime event instance, auto-created by the bus on publish.
 
 ```python
 class Event(BaseModel):
-    name: str                           # Event type name
-    data: BaseModel | None = None       # Payload (Pydantic model instance)
-    id: str                             # UUID (auto-generated)
+    name: str                                      # Event type name
+    data: SerializeAsAny[BaseModel] | None = None  # Payload (keeps concrete fields when serialized)
+    id: str                                        # UUID (auto-generated)
     sources: list[str]                  # Processing chain sources
     timestamps: list[datetime]          # Per-node timestamps
     event_ids: list[str]                # Causal event chain IDs
@@ -24,11 +24,13 @@ class Event(BaseModel):
 | Field | Type | Description |
 | - | - | - |
 | `name` | `str` | Event type, matches `EventDeclaration.name`. |
-| `data` | `BaseModel \| None` | Payload. `None` for no-payload events. |
+| `data` | `SerializeAsAny[BaseModel] \| None` | Payload. `None` for no-payload events; concrete payload fields are preserved when serialized. |
 | `id` | `str` | Unique identifier (UUID hex), auto-generated. |
 | `sources` | `list[str]` | Names of nodes this event passed through. |
 | `timestamps` | `list[datetime]` | Timestamps per node, 1:1 with `sources`. |
 | `event_ids` | `list[str]` | All event IDs in the chain (including self), used for causality tracing. |
+
+> `Event.model_dump()` / `model_dump_json()` preserves the concrete `BaseModel` subclass fields; use `EventCodec` for the cross-process wire format.
 
 ---
 

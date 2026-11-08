@@ -55,6 +55,7 @@ The decorator performs signature validation at **definition time**:
 - Payload event + parameterless function → immediate `TypeError`
 - No-payload event + function with parameters → immediate `TypeError`
 - Payload event + mismatched parameter type → immediate `TypeError` (only when parameter has a type annotation)
+- Supports `from __future__ import annotations` (PEP 563): string annotations are resolved to real types before validation
 
 ---
 

@@ -1,6 +1,6 @@
 import pytest
 
-from infinity_bus import EventDeclaration, EventRegistry
+from infinity_bus import Event, EventDeclaration, EventRegistry
 
 
 @pytest.mark.asyncio
@@ -71,3 +71,19 @@ async def test_event_with_payload_type():
     decl = reg.get('payload.event')
     assert decl is not None
     assert decl.payload_type is MyPayload
+
+
+def test_event_model_dump_preserves_concrete_payload() -> None:
+    """Event 序列化应保留具体 BaseModel 负载字段，而不是退化为空对象。"""
+
+    from pydantic import BaseModel
+
+    class Payload(BaseModel):
+        value: int
+
+    event = Event(name='payload.event', data=Payload(value=42))
+
+    assert event.data == Payload(value=42)
+    assert event.model_dump()['data'] == {'value': 42}
+    assert event.model_dump(mode='json')['data'] == {'value': 42}
+    assert '"data":{"value":42}' in event.model_dump_json()

@@ -327,7 +327,7 @@ class EventBus:
 
         启动顺序与 :meth:`stop` 的清理顺序互为镜像：**先初始化中间件、再激活
         处理器**（处理器在激活阶段发布的消息也因此经过完整的中间件管道），
-        最后启动调度循环并开放发布。任一环节失败都会整体回滚——撤销调度任务、
+        最后启动调度循环并开放发布。任一环节失败或取消都会整体回滚——撤销调度任务、
         下线处理器、回滚中间件——使总线回到可安全重试的「未启动」态，
         不会泄漏半启动的后台任务。
         """
@@ -344,6 +344,10 @@ class EventBus:
                 self._dispatch_task = asyncio.create_task(self._dispatch_loop())
                 self._running.set()
                 self._enable_publish.set()
+            except asyncio.CancelledError:
+                logger.warning('EventBus start cancelled; rolling back')
+                await self._abort_start()
+                raise
             except Exception as e:
                 logger.exception('Error occurred while starting event bus')
                 handler_failures, middleware_failures = await self._abort_start()
@@ -391,45 +395,113 @@ class EventBus:
         return handler_failures, middleware_failures
 
     async def stop(self) -> None:
-        """停止事件总线"""
+        """停止事件总线（**尽力而为**：单个清理步骤失败不会中断其余清理）。
+
+        - 停机事件发布失败、队列排空失败只记录日志，仍继续清理；
+        - 调度循环、活跃任务、未完成派发闸门、处理器与中间件在 ``finally``
+          中按顺序回收，保证 ``is_running`` 最终为 ``False``；
+        - 协程被取消时也会执行清理路径，然后继续向上传播取消。
+        """
         async with self._state_lock:
             if not self._running.is_set():
                 return
 
-            await self._publish(ShutdownEvent.name, source='EventBus', data=None)
-
-            self._enable_publish.clear()  # 阻止新消息入队
-
             try:
-                timeout: float = max(
-                    self._shutdown.queue_timeout_min,
-                    min(self._shutdown.queue_timeout_max, self._queue.qsize() * self._shutdown.avg_wait_time),
-                )
-                await asyncio.wait_for(self._queue.join(), timeout=timeout)  # 等事件全部派发，避免未确认消息被重投
-            except asyncio.TimeoutError:
-                logger.warning('Timeout while waiting for event queue to drain during shutdown')
-
-            if self._dispatch_task:
-                self._dispatch_task.cancel()
                 try:
-                    await self._dispatch_task
-                except asyncio.CancelledError:
-                    pass
+                    await self._publish(ShutdownEvent.name, source='EventBus', data=None)
+                except Exception:
+                    logger.exception('Failed to publish shutdown event; continuing shutdown')
 
-            await self._wait_all_tasks_done()  # 等待所有处理器任务完成
-            await self._clear_fences()  # 未完整派发的事件：撤回认领 + 内存队列结清计数，持久队列等重投
+                self._enable_publish.clear()  # 阻止新消息入队
 
-            self._running.clear()
+                try:
+                    timeout: float = max(
+                        self._shutdown.queue_timeout_min,
+                        min(self._shutdown.queue_timeout_max, self._queue.qsize() * self._shutdown.avg_wait_time),
+                    )
+                    await asyncio.wait_for(self._queue.join(), timeout=timeout)  # 等事件全部派发，避免未确认消息被重投
+                except asyncio.TimeoutError:
+                    logger.warning('Timeout while waiting for event queue to drain during shutdown')
+                except Exception:
+                    logger.exception('Failed to drain event queue during shutdown')
+            finally:
+                self._enable_publish.clear()
+                try:
+                    await self._cancel_dispatch_best_effort()
+                    await self._wait_all_tasks_done_best_effort()
+                    await self._clear_fences_best_effort()
+                finally:
+                    self._running.clear()
+                    try:
+                        await self._deactivate_handlers_best_effort()
+                    finally:
+                        try:
+                            await self._teardown_middlewares_best_effort()
+                        finally:
+                            self._dispatch_task = None
+                            logger.info('EventBus stopped')
+
+    async def _cancel_dispatch_best_effort(self) -> None:
+        """取消并等待调度任务（幂等，异常只记录）。
+
+        使用 ``asyncio.wait`` 而非直接 ``await task``：dispatch task 被取消时也
+        会抛 ``CancelledError``，直接捕获会连同 **stop() 自身的外层取消** 一起吞掉。
+        """
+        task = self._dispatch_task
+        if task is None:
+            return
+        if task.done():
+            self._log_dispatch_task_failure(task)
+            return
+        task.cancel()
+        await asyncio.wait({task})
+        self._log_dispatch_task_failure(task)
+
+    @staticmethod
+    def _log_dispatch_task_failure(task: asyncio.Task[Any]) -> None:
+        """记录调度任务的非取消异常；取消视为正常停机。"""
+        if task.cancelled():
+            return
+        exception = task.exception()
+        if exception is not None:
+            logger.error('Dispatch task failed during shutdown', exc_info=exception)
+
+    async def _wait_all_tasks_done_best_effort(self) -> None:
+        """等待活跃处理器任务收尾（异常只记录）。"""
+        try:
+            await self._wait_all_tasks_done()
+        except Exception:
+            logger.exception('Failed to wait for handler tasks during shutdown')
+
+    async def _clear_fences_best_effort(self) -> None:
+        """结清未完成派发闸门（异常只记录）。"""
+        try:
+            await self._clear_fences()
+        except Exception:
+            logger.exception('Failed to clear dispatch fences during shutdown')
+
+    async def _deactivate_handlers_best_effort(self) -> None:
+        """下线处理器（异常只记录，失败者保留在册）。"""
+        try:
             failures = await self._handlers.deactivate()
-            if failures:
-                logger.warning(
-                    '%d handler(s) failed to deactivate during stop; they remain registered',
-                    len(failures),
-                )
+        except Exception:
+            logger.exception('Handler deactivation failed during shutdown')
+            return
+        if failures:
+            logger.warning(
+                '%d handler(s) failed to deactivate during stop; they remain registered',
+                len(failures),
+            )
+
+    async def _teardown_middlewares_best_effort(self) -> None:
+        """拆卸中间件（异常只记录）。"""
+        try:
             mw_failures = await self._mw_chain.teardown(self)
-            if mw_failures:
-                logger.warning('%d middleware(s) failed to tear down during stop', len(mw_failures))
-            logger.info('EventBus stopped')
+        except Exception:
+            logger.exception('Middleware teardown failed during shutdown')
+            return
+        if mw_failures:
+            logger.warning('%d middleware(s) failed to tear down during stop', len(mw_failures))
 
     async def __aenter__(self) -> 'EventBus':
         """异步上下文管理器入口"""

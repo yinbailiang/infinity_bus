@@ -170,7 +170,7 @@ class EventHandlerRegistry:
             for handler in list(self._handlers.values()):  # 快照：允许嵌套 register
                 activated.append(handler)
                 await handler.on_activate(bus)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             self._bus = None
             for handler in reversed(activated):
                 try:
@@ -197,13 +197,15 @@ class EventHandlerRegistry:
             return []
         bus: 'EventBus' = self._bus
         failures: list[tuple[str, Exception]] = []
-        for hid, handler in list(self._handlers.items()):  # 快照：允许 on_deactivate 内嵌套变更
-            try:
-                await handler.on_deactivate(bus)
-            except Exception as exc:
-                failures.append((hid, exc))
-                logger.exception('Handler %s:%s on_deactivate failed', handler.__class__.__name__, hid)
-        self._bus = None
+        try:
+            for hid, handler in list(self._handlers.items()):  # 快照：允许 on_deactivate 内嵌套变更
+                try:
+                    await handler.on_deactivate(bus)
+                except Exception as exc:
+                    failures.append((hid, exc))
+                    logger.exception('Handler %s:%s on_deactivate failed', handler.__class__.__name__, hid)
+        finally:
+            self._bus = None
         if strict and failures:
             raise failures[0][1]
         return failures

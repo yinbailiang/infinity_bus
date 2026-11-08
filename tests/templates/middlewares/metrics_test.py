@@ -503,6 +503,43 @@ class TestOpenTelemetryIntegration:
         assert metrics.opentelemetry_integrated
 
     @pytest.mark.asyncio
+    async def test_observable_gauges_are_collected(
+        self,
+        base_event_registry: EventRegistry,
+        handler_registry: EventHandlerRegistry,
+    ) -> None:
+        """ObservableGauge 回调必须返回可迭代对象，collect 时应产生数据点。"""
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+        reader = InMemoryMetricReader()
+        provider = MeterProvider(metric_readers=[reader])
+        try:
+            metrics = MetricsMiddleware()
+            metrics.integrate_opentelemetry(provider.get_meter('test_event_bus_gauges'))
+            chain = MiddlewareChain()
+            await chain.add(metrics)
+            bus = EventBus(
+                base_event_registry,
+                handler_registry,
+                queue=InMemoryEventQueue(InMemoryEventQueueConfig(maxsize=10)),
+                middleware_chain=chain,
+            )
+            async with bus:
+                await bus.proxy('test').publish('mw.ping', {'key': 'o', 'count': 1})
+                data = reader.get_metrics_data()
+                assert data is not None
+                data_points: dict[str, int] = {}
+                for resource_metrics in data.resource_metrics:
+                    for scope_metrics in resource_metrics.scope_metrics:
+                        for metric in scope_metrics.metrics:
+                            data_points[metric.name] = len(getattr(metric.data, 'data_points', ()))
+                assert data_points.get('infinity_bus.queue_size', 0) >= 1
+                assert data_points.get('infinity_bus.active_tasks', 0) >= 1
+        finally:
+            provider.shutdown()
+
+    @pytest.mark.asyncio
     async def test_publish_writes_to_otel_instruments(
         self,
         base_event_registry: EventRegistry,
