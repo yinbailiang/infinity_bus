@@ -425,29 +425,46 @@ class EventBus:
                 except Exception:
                     logger.exception('Failed to drain event queue during shutdown')
             finally:
+                self._enable_publish.clear()
                 try:
                     await self._cancel_dispatch_best_effort()
                     await self._wait_all_tasks_done_best_effort()
                     await self._clear_fences_best_effort()
                 finally:
                     self._running.clear()
-                    await self._deactivate_handlers_best_effort()
-                    await self._teardown_middlewares_best_effort()
-                    self._dispatch_task = None
-                    logger.info('EventBus stopped')
+                    try:
+                        await self._deactivate_handlers_best_effort()
+                    finally:
+                        try:
+                            await self._teardown_middlewares_best_effort()
+                        finally:
+                            self._dispatch_task = None
+                            logger.info('EventBus stopped')
 
     async def _cancel_dispatch_best_effort(self) -> None:
-        """取消并等待调度任务（幂等，异常只记录）。"""
+        """取消并等待调度任务（幂等，异常只记录）。
+
+        使用 ``asyncio.wait`` 而非直接 ``await task``：dispatch task 被取消时也
+        会抛 ``CancelledError``，直接捕获会连同 **stop() 自身的外层取消** 一起吞掉。
+        """
         task = self._dispatch_task
-        if task is None or task.done():
+        if task is None:
+            return
+        if task.done():
+            self._log_dispatch_task_failure(task)
             return
         task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception('Dispatch task failed during shutdown')
+        await asyncio.wait({task})
+        self._log_dispatch_task_failure(task)
+
+    @staticmethod
+    def _log_dispatch_task_failure(task: asyncio.Task[Any]) -> None:
+        """记录调度任务的非取消异常；取消视为正常停机。"""
+        if task.cancelled():
+            return
+        exception = task.exception()
+        if exception is not None:
+            logger.error('Dispatch task failed during shutdown', exc_info=exception)
 
     async def _wait_all_tasks_done_best_effort(self) -> None:
         """等待活跃处理器任务收尾（异常只记录）。"""
