@@ -321,6 +321,8 @@ class AuditMiddleware(Middleware):
             await asyncio.sleep(interval)
             try:
                 async with self._sink_lock:
+                    if not self._sink.is_open:
+                        await self._sink.open()
                     await self._sink.maintain()
             except asyncio.CancelledError:
                 raise

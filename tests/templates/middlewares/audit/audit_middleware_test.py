@@ -300,6 +300,21 @@ async def test_periodic_maintenance_runs_without_events(bus: EventBus) -> None:
 
 
 @pytest.mark.asyncio
+async def test_periodic_maintenance_reopens_closed_sink(bus: EventBus) -> None:
+    """写失败关闭 Sink 后，维护任务可独立重开并继续清理。"""
+    sink = RecordingSink()
+    sink.fail_open = True
+    middleware = AuditMiddleware(sink, maintenance_interval=0.01)
+    await middleware.on_setup(bus)
+    assert not sink.is_open
+    sink.fail_open = False
+    await asyncio.sleep(0.05)
+    assert sink.is_open
+    assert sink.maintain_calls >= 1
+    await middleware.on_teardown(bus)
+
+
+@pytest.mark.asyncio
 async def test_maintain_failure_is_isolated(bus: EventBus) -> None:
     """维护失败只记录日志，不影响写入。"""
     sink = RecordingSink()

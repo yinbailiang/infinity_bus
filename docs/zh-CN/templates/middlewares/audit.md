@@ -98,7 +98,8 @@ await chain.add(AuditMiddleware(JSONLSink('events.jsonl')))
 2. 写入失败：先调用 `sink.reclaim()` 强制回收空间（忽略保留策略的内部限频），
    再关闭 Sink、进入退避；到点后重新 `open()`，成功即自动恢复写入。
 3. 保留策略由独立维护任务按 `maintenance_interval` 周期执行，不依赖事件写入；
-   服务空闲或持续写失败时仍会清理。
+   服务空闲或持续写失败时仍会清理。Sink 因写失败关闭时，维护任务会尝试
+   重新打开它并继续清理。
 4. Sink 的 `maintain()` 失败只记录日志，不影响后续写入。
 5. 停机时先停止维护任务，再排空队列（`close_timeout`）并关闭 Sink；`on_teardown`
    可重复调用。

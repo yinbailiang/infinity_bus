@@ -102,6 +102,7 @@ await chain.add(AuditMiddleware(JSONLSink('events.jsonl')))
    a successful `open()` restores normal writes.
 3. Retention runs on an independent maintenance task every `maintenance_interval`, not
    only after writes; idle services and persistent write failures still get cleaned up.
+   If a write failure closed the sink, the maintenance task reopens it and keeps pruning.
 4. A `maintain()` failure is logged and never affects subsequent writes.
 5. Shutdown stops the maintenance task, drains the queue (`close_timeout`), then closes
    the sink; `on_teardown` is idempotent.
