@@ -41,3 +41,21 @@ def test_handler_rejects_mismatched_future_annotation() -> None:
 
     with pytest.raises(TypeError, match='FuturePayload'):
         handler(FutureEvent)(bad_handler)
+
+
+def test_handler_accepts_local_future_annotation() -> None:
+    """函数内定义的局部负载类也能通过名称回退匹配。"""
+
+    class LocalPayload(BaseModel):
+        message: str
+
+    class LocalEvent(EventDeclaration):
+        name = 'test.local_future_annotations'
+        payload_type = LocalPayload
+
+    @handler(LocalEvent)
+    async def on_event(payload: LocalPayload) -> None:
+        assert payload.message
+
+    assert issubclass(on_event, EventHandler)
+    assert on_event.__name__ == 'on_event'

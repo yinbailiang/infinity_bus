@@ -46,6 +46,10 @@ def handler(
                         first_annotation = get_type_hints(func).get(params[0].name, first_annotation)
                     except Exception:
                         pass  # 无法解析的注解保持原样，交给下面的类型校验报错
+                    if isinstance(first_annotation, str):
+                        expected = event_decl.payload_type
+                        if first_annotation in {expected.__name__, expected.__qualname__}:
+                            first_annotation = expected
                 if first_annotation is not sig.empty and first_annotation is not event_decl.payload_type:
                     raise TypeError(
                         f'处理器 {func.__name__} 参数类型应为 {event_decl.payload_type.__name__}，'
