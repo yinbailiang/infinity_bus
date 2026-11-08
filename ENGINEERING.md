@@ -61,7 +61,7 @@ ignore-nested-functions = true
 
 | 指标 | 数值 |
 | - | - |
-| 公开 API docstring 覆盖 | **92.3%** |
+| 公开 API docstring 覆盖 | **93.6%** |
 | 最低阈值 | 60% |
 | 文档文件 | 58 篇 `.md` |
 
@@ -72,11 +72,11 @@ ignore-nested-functions = true
 ### 覆盖率
 
 ```text
-450 passed · 10 deselected(slow) · 0 failed · 13.8s
-总覆盖率: 94%（2534 statements / 159 missed）
+480 passed · 10 deselected(slow) · 0 failed · 13.8s
+总覆盖率: 93%（2987 statements / 195 missed）
 ```
 
-14 个模块达到 **100%** 覆盖，最低模块 83%（logging）。
+13 个模块达到 **100%** 覆盖，最低模块 85%（pipe）。
 
 ### 架构
 
@@ -100,10 +100,14 @@ tests/
     │   ├── mailbox_test.py
     │   └── service_test.py
     ├── middlewares/
+    │   ├── audit/
+    │   │   ├── audit_middleware_test.py
+    │   │   ├── jsonl_sink_test.py
+    │   │   ├── record_test.py
+    │   │   └── sqlite_sink_test.py
     │   ├── event_block_test.py
     │   ├── event_forward_test.py
     │   ├── event_transform_test.py
-    │   ├── logging_test.py
     │   ├── metrics_test.py
     │   ├── rate_limit_test.py
     │   └── recursion_guard_test.py
@@ -161,7 +165,7 @@ uv run pre-commit run --all-files   # 手动全量运行
 | - | - |
 | 最大单文件 | ~588 行 (`bus.py`) |
 | 模块平均 | ~199 行/文件 |
-| 生产文件数 | 28 个 `.py` |
+| 生产文件数 | 33 个 `.py` |
 
 每个文件一个职责，打开瞬间看完。新增功能不改旧代码。
 
@@ -189,10 +193,16 @@ src/infinity_bus/
     │   └── service.py    服务处理器模板
     ├── middlewares/
     │   ├── __init__.py
+    │   ├── audit/               统一审计日志
+    │   │   ├── __init__.py
+    │   │   ├── middleware.py    AuditMiddleware
+    │   │   ├── record.py        AuditRecord / 规范化序列化
+    │   │   ├── sink.py          AuditSink 接口
+    │   │   ├── jsonl.py         JSONL Sink
+    │   │   └── sqlite.py        SQLite Sink / 保留策略
     │   ├── event_block.py       事件屏蔽
     │   ├── event_forward.py     事件转发
     │   ├── event_transform.py   事件转换
-    │   ├── logging.py           JSONL + SQLite 日志
     │   ├── metrics.py           指标上报
     │   ├── rate_limit.py        速率限制
     │   └── recursion_guard.py   递归防护

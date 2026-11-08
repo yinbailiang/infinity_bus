@@ -1,7 +1,7 @@
 """infinity_bus.templates — 可插拔的事件处理模板与中间件集合。
 
 提供开箱即用的处理器装饰器、管道通信、请求-响应模式、事件注册器
-以及日志、指标、限流、转换等常用中间件。
+以及审计日志、指标、限流、转换等常用中间件。
 """
 
 from .expect import OneShotEventHandler, expect, temporary_handler
@@ -23,19 +23,24 @@ from .idempotency import (
     SqliteIdempotencyRecorder,
 )
 from .middlewares import (
+    AuditMiddleware,
+    AuditRecord,
+    AuditSink,
     BlockPredicate,
     EventBlockMiddleware,
     EventFilter,
     EventForwardMiddleware,
     EventTransformMiddleware,
-    JSONLLoggingMiddleware,
+    JSONLSink,
     LogFallback,
     MetricsMiddleware,
     MetricsSnapshot,
+    PayloadMode,
     RateLimitMiddleware,
     RecursionDetectedError,
     RecursionGuardMiddleware,
-    SQLiteLoggingMiddleware,
+    RetentionPolicy,
+    SQLiteSink,
     TargetBusProvider,
     TransformFunc,
     make_allowlist_predicate,
@@ -45,7 +50,6 @@ from .middlewares import (
     make_field_inject_transform,
     make_field_redact_transform,
     make_rename_transform,
-    serialize_data,
 )
 from .pipe import (
     InProcessPipe,
@@ -73,9 +77,16 @@ __all__ = [
     'expect',
     'OneShotEventHandler',
     'temporary_handler',
+    # audit
+    'AuditMiddleware',
+    'AuditRecord',
+    'AuditSink',
+    'JSONLSink',
+    'SQLiteSink',
+    'RetentionPolicy',
+    'PayloadMode',
+    'LogFallback',
     # middlewares
-    'SQLiteLoggingMiddleware',
-    'JSONLLoggingMiddleware',
     'MetricsMiddleware',
     'MetricsSnapshot',
     'RateLimitMiddleware',
@@ -94,10 +105,8 @@ __all__ = [
     # middlewares 类型别名 & 工具
     'BlockPredicate',
     'EventFilter',
-    'LogFallback',
     'TargetBusProvider',
     'TransformFunc',
-    'serialize_data',
     # pipe
     'PipeHandshakeError',
     'PipeClosedError',

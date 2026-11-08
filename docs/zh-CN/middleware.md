@@ -235,8 +235,7 @@ class MiddlewareChain:
 
 | 中间件 | 阶段 | 用途 |
 | - | - | - |
-| `JSONLLoggingMiddleware` | `on_publish` | 零依赖 JSONL 文件日志 |
-| `SQLiteLoggingMiddleware` | `on_publish` | SQLite 数据库日志（需 `aiosqlite`） |
+| `AuditMiddleware` | `on_publish` | 统一审计日志（JSONL / SQLite / 自定义 Sink） |
 | `RateLimitMiddleware` | `before_publish` | 滑动窗口速率限制（全局或按事件） |
 | `EventTransformMiddleware` | `before_publish` | 事件名 / 字段转换（重命名、脱敏、注入） |
 | `EventBlockMiddleware` | `before_publish` | 按规则屏蔽事件（白名单 / 黑名单） |
@@ -248,7 +247,7 @@ class MiddlewareChain:
 
 ## 使用示例
 
-### 日志中间件
+### 自定义日志中间件
 
 记录每次发布的事件信息和耗时：
 
@@ -367,7 +366,7 @@ class HotReloadHandler(EventHandler):
         chain = bus_proxy.middleware
 
         # 热添加 —— on_setup 立即被调用
-        await chain.add(AuditMiddleware())
+        await chain.add(AuditMiddleware(JSONLSink("events.jsonl")))
 
         # 热移除 —— on_teardown 立即被调用
         # 注意：已在飞的链仍可能调用该中间件，见 Middleware.on_teardown 文档
