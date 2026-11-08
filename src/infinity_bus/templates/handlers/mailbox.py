@@ -4,7 +4,6 @@ import asyncio
 import logging
 import random
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 class MailboxConfig(BaseModel):
     """邮箱处理器配置"""
 
-    queue_put_timeout: Optional[float] = Field(
+    queue_put_timeout: float | None = Field(
         default=None,
         description='入队超时（秒），None 表示无限等待。',
     )

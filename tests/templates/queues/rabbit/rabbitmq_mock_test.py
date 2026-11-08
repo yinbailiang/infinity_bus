@@ -8,7 +8,7 @@
 
 import asyncio
 from types import SimpleNamespace
-from typing import Any, Tuple
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -28,7 +28,7 @@ def _registry() -> EventRegistry:
     return reg
 
 
-def _make_q(strategy: str = 'restart') -> Tuple[RabbitFanoutQueue, Any, Any, Any, Any]:
+def _make_q(strategy: str = 'restart') -> tuple[RabbitFanoutQueue, Any, Any, Any, Any]:
     """构造注入 fake 的队列实例：返回 (q, exchange, queue, channel, conn)。"""
     codec = EventCodec(_registry())
     exchange: Any = AsyncMock()

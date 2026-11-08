@@ -40,7 +40,7 @@ ignore = [
 ]
 ```
 
-启用规则组：`E`（pycodestyle）、`F`（pyflakes）、`I`（isort）、`ASYNC`（异步最佳实践）、`PLE`（pylint 错误）。
+启用规则组：`E`（pycodestyle）、`F`（pyflakes）、`I`（isort）、`ASYNC`（异步最佳实践）、`PLE`（pylint 错误）；并启用注解现代化规则 `UP006` / `UP007` / `UP035` / `UP045`，统一使用 PEP 585（`list` / `dict` / `type` 等）与 PEP 604（`X | None`、`X | Y`）。
 
 ---
 

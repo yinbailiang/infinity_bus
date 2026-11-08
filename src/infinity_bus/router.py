@@ -14,7 +14,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Set, Tuple, cast
+from collections.abc import Iterable, Iterator
+from typing import TYPE_CHECKING, cast
 
 from .event import EventRegistry
 
@@ -36,8 +37,8 @@ class Subscriptions:
     def __init__(self, patterns: Iterable[str | Regex] | None = None) -> None:
         """构造订阅束（patterns 可为 str/Regex 的可迭代，复制保存）。"""
         self._patterns: list[str | Regex] = list(patterns) if patterns is not None else []
-        self._router: Optional[Router] = None
-        self._handler_id: Optional[str] = None
+        self._router: Router | None = None
+        self._handler_id: str | None = None
 
     # ------------------------------------------------------------------
     # 变更（激活中自动同步 live 路由）
@@ -132,9 +133,9 @@ class Router:
     def __init__(self, event_registry: EventRegistry) -> None:
         """构造路由器（需事件注册表以预计算分派表）。"""
         self._events: EventRegistry = event_registry
-        self._route_table: Dict[str, Subscriptions] = {}
+        self._route_table: dict[str, Subscriptions] = {}
         self.version: int = 0
-        self._table: Dict[str, List[str]] = {}
+        self._table: dict[str, list[str]] = {}
         self._event_version: int = -1
         self._route_version: int = -1
 
@@ -177,17 +178,17 @@ class Router:
     # ------------------------------------------------------------------
 
     @property
-    def routes(self) -> Tuple[Tuple[str, Subscriptions], ...]:
+    def routes(self) -> tuple[tuple[str, Subscriptions], ...]:
         """当前激活路由的只读快照 ``((handler_id, 订阅束), ...)``。"""
         return tuple(self._route_table.items())
 
     @property
-    def dispatch_table(self) -> Dict[str, List[str]]:
+    def dispatch_table(self) -> dict[str, list[str]]:
         """预计算分派表的只读副本（自动感知版本变更）。"""
         self._ensure_fresh()
         return {name: list(ids) for name, ids in self._table.items()}
 
-    def match(self, event_name: str) -> List[str]:
+    def match(self, event_name: str) -> list[str]:
         """返回命中该事件名的 handler_id 列表（保持订阅登记顺序）。
 
         自动感知事件注册表/路由版本变更并重建缓存；只出 id，
@@ -206,8 +207,8 @@ class Router:
 
     def _rebuild(self) -> None:
         """重建分派表：精确 str → 反向索引；非 str（Regex）→ 扫描；按 handler 去重。"""
-        exact_index: Dict[str, List[str]] = {}
-        regex_list: List[Tuple[str, 'Regex']] = []
+        exact_index: dict[str, list[str]] = {}
+        regex_list: list[tuple[str, 'Regex']] = []
         for handler_id, subs in self._route_table.items():
             for pattern in subs.patterns:
                 if isinstance(pattern, str):
@@ -217,8 +218,8 @@ class Router:
 
         self._table.clear()
         for event_name in self._events.list_names():
-            matched: List[str] = []
-            seen: Set[str] = set()
+            matched: list[str] = []
+            seen: set[str] = set()
             for hid in exact_index.get(event_name, ()):
                 if hid not in seen:
                     matched.append(hid)

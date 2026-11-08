@@ -11,7 +11,7 @@ import asyncio
 import sqlite3
 from collections import OrderedDict
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Protocol, Union
+from typing import Any, Protocol
 
 from infinity_bus import Event, EventBus, EventHandler, Regex
 
@@ -280,10 +280,10 @@ class IdempotentHandler(EventHandler):
 
     def __init__(
         self,
-        subscriptions: Optional[List[Union[Regex, str]]],
+        subscriptions: list[Regex | str] | None,
         recorder: IdempotencyRecorder,
         consumer: str,
-        handle_timeout: Optional[float] = 32.0,
+        handle_timeout: float | None = 32.0,
     ) -> None:
         """构造幂等处理器。
 

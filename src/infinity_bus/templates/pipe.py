@@ -2,9 +2,10 @@ import asyncio
 import logging
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import TracebackType
-from typing import Any, AsyncGenerator, Dict, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -44,10 +45,10 @@ class Pipe(ABC):
 
     async def __aexit__(
         self,
-        exc_type: Optional[type],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> Optional[bool]:
+        exc_type: type | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
         try:
             await self.close()
         except Exception:
@@ -79,7 +80,7 @@ class PipeAllocator(ABC):
     """管道分配器抽象基类，管理管道实例的创建、查找与释放。"""
 
     @abstractmethod
-    async def allocate(self, **kwargs: Dict[str, Any]) -> str:
+    async def allocate(self, **kwargs: dict[str, Any]) -> str:
         """创建一个管道实例并返回其唯一标识符。"""
         pass
 
@@ -89,7 +90,7 @@ class PipeAllocator(ABC):
         pass
 
     @abstractmethod
-    async def get(self, pipe_id: str) -> Optional[Pipe]:
+    async def get(self, pipe_id: str) -> Pipe | None:
         """根据 ID 获取管道实例，不存在时返回 None。"""
         pass
 
@@ -97,7 +98,7 @@ class PipeAllocator(ABC):
 class InProcessPipe(Pipe):
     """简单的 asyncio.Queue 包装，支持背压"""
 
-    def __init__(self, maxsize: Optional[int] = None) -> None:
+    def __init__(self, maxsize: int | None = None) -> None:
         super().__init__()
         self._queue: asyncio.Queue[BaseModel] = asyncio.Queue() if maxsize is None else asyncio.Queue(maxsize=maxsize)
         self._closed = asyncio.Event()
@@ -160,12 +161,12 @@ class InProcessPipeAllocator(PipeAllocator):
         self,
         pipe_type: type[Pipe] = InProcessPipe,
     ) -> None:
-        self._pipes: Dict[str, Pipe] = {}
+        self._pipes: dict[str, Pipe] = {}
         self._pipe_type = pipe_type
 
     async def allocate(
         self,
-        **kwargs: Dict[str, Any],
+        **kwargs: dict[str, Any],
     ) -> str:
         """创建管道实例并返回唯一标识符。"""
         pipe_id: str = uuid.uuid4().hex
@@ -176,7 +177,7 @@ class InProcessPipeAllocator(PipeAllocator):
         self._pipes[pipe_id] = pipe
         return pipe_id
 
-    async def get(self, pipe_id: str) -> Optional[Pipe]:
+    async def get(self, pipe_id: str) -> Pipe | None:
         """根据 ID 获取管道实例，不存在时返回 None。"""
         return self._pipes.get(pipe_id)
 
@@ -185,7 +186,7 @@ class InProcessPipeAllocator(PipeAllocator):
         self._pipes.pop(pipe_id, None)
 
 
-_default_allocator: Optional[InProcessPipeAllocator] = None
+_default_allocator: InProcessPipeAllocator | None = None
 
 
 def get_default_allocator() -> InProcessPipeAllocator:
@@ -214,9 +215,9 @@ async def open_pipe(
     req_event: str,
     resp_event: str,
     handshake_timeout: float = 5.0,
-    session_id: Optional[str] = None,
-    allocator: Optional[InProcessPipeAllocator] = None,
-    pipe_kargs: Optional[Dict[str, Any]] = None,
+    session_id: str | None = None,
+    allocator: InProcessPipeAllocator | None = None,
+    pipe_kargs: dict[str, Any] | None = None,
 ) -> AsyncGenerator[Pipe, None]:
     """客户端管道握手上下文管理器。
 
@@ -228,7 +229,7 @@ async def open_pipe(
     session_id = session_id or uuid.uuid4().hex
 
     pipe_id: str = await allocator.allocate(**(pipe_kargs or {}))
-    pipe: Optional[Pipe] = await allocator.get(pipe_id)
+    pipe: Pipe | None = await allocator.get(pipe_id)
     if pipe is None:
         raise PipeHandshakeError(f'Failed to allocate pipe {pipe_id}')
 
@@ -272,9 +273,9 @@ async def expect_pipe(
     bus_proxy: EventBus.Proxy,
     req_event: str,
     resp_event: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     timeout: float = 5.0,
-    allocator: Optional[InProcessPipeAllocator] = None,
+    allocator: InProcessPipeAllocator | None = None,
 ) -> AsyncGenerator[Pipe, None]:
     """等待一个管道连接请求，返回已建立的 Pipe 实例。"""
 
@@ -295,12 +296,12 @@ async def expect_pipe(
     except asyncio.TimeoutError as e:
         raise PipeHandshakeError('Handshake timeout') from e
 
-    req_data: Optional[BaseModel] = req_event_obj.data
+    req_data: BaseModel | None = req_event_obj.data
     if not isinstance(req_data, PipeOpenRequest):
         raise PipeHandshakeError('Invalid request payload type')
 
     pipe_id: str = req_data.pipe_id
-    pipe: Optional[Pipe] = await allocator.get(pipe_id)
+    pipe: Pipe | None = await allocator.get(pipe_id)
     if pipe is None:
         error_resp = PipeLinkedResponse(
             session_id=req_data.session_id,

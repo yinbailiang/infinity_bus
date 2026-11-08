@@ -16,21 +16,21 @@ class EventBus:
         self,
         event_registry: EventRegistry,
         handler_registry: EventHandlerRegistry,
-        queue: Optional[EventQueue] = None,
-        router: Optional[Router] = None,
+        queue: EventQueue | None = None,
+        router: Router | None = None,
         max_handler_semaphore: int = 256,
         shutdown: ShutdownConfig = ShutdownConfig(),
-        middleware_chain: Optional[MiddlewareChain] = None
+        middleware_chain: MiddlewareChain | None = None
     ) -> None
 
     # Lifecycle
     async def start(self) -> None
     async def stop(self) -> None
     async def __aenter__(self) -> "EventBus"
-    async def __aexit__(self, ...) -> Optional[bool]
+    async def __aexit__(self, ...) -> bool | None
 
     # Proxy
-    def proxy(self, source: str, raw_event: Optional[Event] = None) -> Proxy
+    def proxy(self, source: str, raw_event: Event | None = None) -> Proxy
 
     # Router
     @property
@@ -55,11 +55,11 @@ class EventBus:
 | - | - | - | - |
 | `event_registry` | `EventRegistry` | (required) | Event registry instance. |
 | `handler_registry` | `EventHandlerRegistry` | (required) | Handler registry instance. |
-| `queue` | `Optional[EventQueue]` | `None` | Internal dispatch queue; the bus depends only on the `EventQueue` abstraction. Defaults to `InMemoryEventQueue()` (capacity from its own default config, 1024). See [Event Queue doc](queue.md). |
-| `router` | `Optional[Router]` | `None` | Internal router / dispatch table. Defaults to `Router(event_registry)`; exposed as `bus.router`. See [Router doc](router.md). |
+| `queue` | `EventQueue \| None` | `None` | Internal dispatch queue; the bus depends only on the `EventQueue` abstraction. Defaults to `InMemoryEventQueue()` (capacity from its own default config, 1024). See [Event Queue doc](queue.md). |
+| `router` | `Router \| None` | `None` | Internal router / dispatch table. Defaults to `Router(event_registry)`; exposed as `bus.router`. See [Router doc](router.md). |
 | `max_handler_semaphore` | `int` | `256` | Max concurrent handlers (semaphore). |
 | `shutdown` | `ShutdownConfig` | `ShutdownConfig()` | Shutdown behavior config. |
-| `middleware_chain` | `Optional[MiddlewareChain]` | `None` | Middleware chain for publish hooks. |
+| `middleware_chain` | `MiddlewareChain \| None` | `None` | Middleware chain for publish hooks. |
 
 Constructing automatically registers `ShutdownEvent` and `TaskErrorEvent` (if not present),
 and creates an internal [Router](router.md) (exposed as `bus.router`) for event-to-handler
@@ -200,7 +200,7 @@ class Proxy:
     async def publish(
         self,
         name: str,
-        data: Optional[Union[Dict[str, Any], BaseModel]] = None
+        data: dict[str, Any] | BaseModel | None = None
     ) -> None
 
     @property
@@ -289,7 +289,7 @@ Handlers can subscribe to this event to perform cleanup before shutdown.
 ```python
 class TaskErrorPayload(BaseModel):
     error_event: Event
-    handler_id: Optional[str]
+    handler_id: str | None
     handler_name: str
     error_type: str
     error_message: str

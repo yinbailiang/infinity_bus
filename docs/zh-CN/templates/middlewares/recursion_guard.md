@@ -25,16 +25,16 @@ class RecursionGuardMiddleware(Middleware):
     def __init__(
         self,
         max_depth: int = 3,
-        max_chain_length: Optional[int] = 50,
-        ignore_sources: Optional[Set[str]] = None,
+        max_chain_length: int | None = 50,
+        ignore_sources: set[str] | None = None,
     ) -> None
 ```
 
 | 参数 | 类型 | 说明 |
 | - | - | - |
 | `max_depth` | `int` | 同一 `source` 在事件链的 `sources` 中允许出现的最大次数，默认 `3`。 |
-| `max_chain_length` | `Optional[int]` | 事件链绝对最大长度，默认 `50`。设为 `None` 禁用此层检测。 |
-| `ignore_sources` | `Optional[Set[str]]` | 不参与 per-source 计数的发布者名称集合。不影响绝对链长检测。 |
+| `max_chain_length` | `int \| None` | 事件链绝对最大长度，默认 `50`。设为 `None` 禁用此层检测。 |
+| `ignore_sources` | `set[str] \| None` | 不参与 per-source 计数的发布者名称集合。不影响绝对链长检测。 |
 
 ### RecursionDetectedError
 

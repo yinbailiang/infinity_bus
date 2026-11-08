@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, Dict, Set
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -12,7 +13,7 @@ from infinity_bus import (
     OnPublishNext,
 )
 
-BlockPredicate = Callable[[str, Dict[str, Any] | BaseModel | None], bool]
+BlockPredicate = Callable[[str, dict[str, Any] | BaseModel | None], bool]
 """屏蔽判定函数签名：(name, data) -> bool。返回 ``True`` 表示屏蔽该事件。"""
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ class EventBlockMiddleware(Middleware):
         event_registry: EventRegistry,
         name: str,
         source: str,
-        data: Dict[str, Any] | BaseModel | None,
+        data: dict[str, Any] | BaseModel | None,
         old_event: Event | None,
         next: BeforePublishNext,
     ) -> None:
@@ -105,11 +106,11 @@ def make_blocklist_predicate(
         EventBlockMiddleware(pred, block_reason="debug events disabled")
     """
 
-    blocked: Set[str] = set(event_names)
+    blocked: set[str] = set(event_names)
 
     def _predicate(
         name: str,
-        data: Dict[str, Any] | BaseModel | None,
+        data: dict[str, Any] | BaseModel | None,
     ) -> bool:
         return name in blocked
 
@@ -127,11 +128,11 @@ def make_allowlist_predicate(
         EventBlockMiddleware(pred, block_reason="not in allowlist")
     """
 
-    allowed: Set[str] = set(event_names)
+    allowed: set[str] = set(event_names)
 
     def _predicate(
         name: str,
-        data: Dict[str, Any] | BaseModel | None,
+        data: dict[str, Any] | BaseModel | None,
     ) -> bool:
         return name not in allowed
 

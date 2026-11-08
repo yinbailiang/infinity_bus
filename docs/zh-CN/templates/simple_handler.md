@@ -21,16 +21,16 @@
 
 ```python
 def handler(
-    event_decl: Type[EventDeclaration],
+    event_decl: type[EventDeclaration],
     *,
-    handle_timeout: Optional[float] = 32.0,
-) -> Callable[[HandlerFunc], Type[GenericEventHandler]]
+    handle_timeout: float | None = 32.0,
+) -> Callable[[HandlerFunc], type[GenericEventHandler]]
 ```
 
 | 参数 | 类型 | 说明 |
 | - | - | - |
-| `event_decl` | `Type[EventDeclaration]` | 事件声明类，必须已定义 `name` 和可选的 `payload_type`。 |
-| `handle_timeout` | `Optional[float]` | 处理器超时时间（秒）。`None` 表示无超时。默认 `32.0`。 |
+| `event_decl` | `type[EventDeclaration]` | 事件声明类，必须已定义 `name` 和可选的 `payload_type`。 |
+| `handle_timeout` | `float \| None` | 处理器超时时间（秒）。`None` 表示无超时。默认 `32.0`。 |
 
 **返回值**：一个装饰器函数，接受普通函数并返回一个 `EventHandler` 子类。
 

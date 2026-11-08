@@ -28,8 +28,8 @@
 
 ```python
 TransformFunc = Callable[
-    [str, Dict[str, Any] | BaseModel | None],
-    tuple[str, Dict[str, Any] | BaseModel | None],
+    [str, dict[str, Any] | BaseModel | None],
+    tuple[str, dict[str, Any] | BaseModel | None],
 ]
 
 class EventTransformMiddleware(Middleware):
@@ -43,12 +43,12 @@ class EventTransformMiddleware(Middleware):
 ### make_rename_transform
 
 ```python
-def make_rename_transform(mapping: Dict[str, str]) -> TransformFunc
+def make_rename_transform(mapping: dict[str, str]) -> TransformFunc
 ```
 
 | 参数 | 类型 | 说明 |
 | - | - | - |
-| `mapping` | `Dict[str, str]` | 旧事件名 → 新事件名的映射字典。未匹配的事件名保持原样。 |
+| `mapping` | `dict[str, str]` | 旧事件名 → 新事件名的映射字典。未匹配的事件名保持原样。 |
 
 ### make_field_inject_transform
 

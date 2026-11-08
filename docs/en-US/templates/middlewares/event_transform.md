@@ -32,8 +32,8 @@ Three factory functions simplify common transform scenarios:
 
 ```python
 TransformFunc = Callable[
-    [str, Dict[str, Any] | BaseModel | None],
-    tuple[str, Dict[str, Any] | BaseModel | None],
+    [str, dict[str, Any] | BaseModel | None],
+    tuple[str, dict[str, Any] | BaseModel | None],
 ]
 
 class EventTransformMiddleware(Middleware):
@@ -47,12 +47,12 @@ class EventTransformMiddleware(Middleware):
 ### make_rename_transform
 
 ```python
-def make_rename_transform(mapping: Dict[str, str]) -> TransformFunc
+def make_rename_transform(mapping: dict[str, str]) -> TransformFunc
 ```
 
 | Parameter | Type | Description |
 | - | - | - |
-| `mapping` | `Dict[str, str]` | Mapping of old event names → new event names. Unmatched names remain unchanged. |
+| `mapping` | `dict[str, str]` | Mapping of old event names → new event names. Unmatched names remain unchanged. |
 
 ### make_field_inject_transform
 

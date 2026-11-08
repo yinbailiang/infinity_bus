@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, Dict
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -13,8 +14,8 @@ from infinity_bus import (
 )
 
 TransformFunc = Callable[
-    [str, Dict[str, Any] | BaseModel | None],
-    tuple[str, Dict[str, Any] | BaseModel | None],
+    [str, dict[str, Any] | BaseModel | None],
+    tuple[str, dict[str, Any] | BaseModel | None],
 ]
 """事件转换函数签名：(name, data) -> (new_name, new_data)。"""
 
@@ -53,7 +54,7 @@ class EventTransformMiddleware(Middleware):
         event_registry: EventRegistry,
         name: str,
         source: str,
-        data: Dict[str, Any] | BaseModel | None,
+        data: dict[str, Any] | BaseModel | None,
         old_event: Event | None,
         next: BeforePublishNext,
     ) -> None:
@@ -71,7 +72,7 @@ class EventTransformMiddleware(Middleware):
 
 
 def make_rename_transform(
-    mapping: Dict[str, str],
+    mapping: dict[str, str],
 ) -> TransformFunc:
     """创建一个简单的事件重命名转换。
 
@@ -83,8 +84,8 @@ def make_rename_transform(
 
     def _rename(
         name: str,
-        data: Dict[str, Any] | BaseModel | None,
-    ) -> tuple[str, Dict[str, Any] | BaseModel | None]:
+        data: dict[str, Any] | BaseModel | None,
+    ) -> tuple[str, dict[str, Any] | BaseModel | None]:
         return mapping.get(name, name), data
 
     return _rename
@@ -103,8 +104,8 @@ def make_field_inject_transform(
 
     def _inject(
         name: str,
-        data: Dict[str, Any] | BaseModel | None,
-    ) -> tuple[str, Dict[str, Any] | BaseModel | None]:
+        data: dict[str, Any] | BaseModel | None,
+    ) -> tuple[str, dict[str, Any] | BaseModel | None]:
         if isinstance(data, BaseModel):
             data = {**static_fields, **data.model_dump()}
             return name, data
@@ -130,8 +131,8 @@ def make_field_redact_transform(
 
     def _redact(
         name: str,
-        data: Dict[str, Any] | BaseModel | None,
-    ) -> tuple[str, Dict[str, Any] | BaseModel | None]:
+        data: dict[str, Any] | BaseModel | None,
+    ) -> tuple[str, dict[str, Any] | BaseModel | None]:
         if isinstance(data, BaseModel):
             data = data.model_dump()
         if isinstance(data, dict):

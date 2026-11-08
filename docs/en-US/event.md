@@ -14,21 +14,21 @@ Runtime event instance, auto-created by the bus on publish.
 ```python
 class Event(BaseModel):
     name: str                           # Event type name
-    data: Optional[BaseModel] = None    # Payload (Pydantic model instance)
+    data: BaseModel | None = None       # Payload (Pydantic model instance)
     id: str                             # UUID (auto-generated)
-    sources: List[str]                  # Processing chain sources
-    timestamps: List[datetime]          # Per-node timestamps
-    event_ids: List[str]                # Causal event chain IDs
+    sources: list[str]                  # Processing chain sources
+    timestamps: list[datetime]          # Per-node timestamps
+    event_ids: list[str]                # Causal event chain IDs
 ```
 
 | Field | Type | Description |
 | - | - | - |
 | `name` | `str` | Event type, matches `EventDeclaration.name`. |
-| `data` | `Optional[BaseModel]` | Payload. `None` for no-payload events. |
+| `data` | `BaseModel \| None` | Payload. `None` for no-payload events. |
 | `id` | `str` | Unique identifier (UUID hex), auto-generated. |
-| `sources` | `List[str]` | Names of nodes this event passed through. |
-| `timestamps` | `List[datetime]` | Timestamps per node, 1:1 with `sources`. |
-| `event_ids` | `List[str]` | All event IDs in the chain (including self), used for causality tracing. |
+| `sources` | `list[str]` | Names of nodes this event passed through. |
+| `timestamps` | `list[datetime]` | Timestamps per node, 1:1 with `sources`. |
+| `event_ids` | `list[str]` | All event IDs in the chain (including self), used for causality tracing. |
 
 ---
 
@@ -39,13 +39,13 @@ Abstract base class for event declarations. All custom events must subclass.
 ```python
 class EventDeclaration(ABC):
     name: ClassVar[str]                              # Event name (must be non-empty)
-    payload_type: ClassVar[Optional[Type[BaseModel]]] = None  # Optional payload model
+    payload_type: ClassVar[type[BaseModel] | None] = None     # Optional payload model
 ```
 
 | ClassVar | Type | Description |
 | - | - | - |
 | `name` | `ClassVar[str]` | **Required.** Unique event identifier. Cannot be empty or whitespace. Automatically validated at subclass definition time — raises `TypeError` if invalid. |
-| `payload_type` | `ClassVar[Optional[Type[BaseModel]]]` | Pydantic model for payload. `None` = no payload. |
+| `payload_type` | `ClassVar[type[BaseModel] \| None]` | Pydantic model for payload. `None` = no payload. |
 
 ### Usage
 
@@ -77,10 +77,10 @@ Manages all valid event declarations. Used by the bus to validate event types an
 ```python
 class EventRegistry:
     def __init__(self) -> None
-    def register(self, event_decl: Type[EventDeclaration]) -> None
+    def register(self, event_decl: type[EventDeclaration]) -> None
     def unregister(self, event_name: str) -> None
-    def get(self, name: str) -> Optional[Type[EventDeclaration]]
-    def list_names(self) -> List[str]
+    def get(self, name: str) -> type[EventDeclaration] | None
+    def list_names(self) -> list[str]
 
     @property
     def version(self) -> int

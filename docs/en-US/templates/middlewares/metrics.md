@@ -73,14 +73,14 @@ class MetricsMiddleware(Middleware):
 
 ```python
 class MetricsSnapshot(BaseModel):
-    publish_total: Dict[str, int]           # {event_name: publish count}
-    publish_duration_sec: Dict[str, Buckets] # {event_name: latency histogram}
+    publish_total: dict[str, int]            # {event_name: publish count}
+    publish_duration_sec: dict[str, Buckets] # {event_name: latency histogram}
     publish_errors_total: int               # Total publish failures
     queue_size: int                         # Current queue depth
     active_tasks: int                       # Current active handler tasks
-    task_total: Dict[str, Dict[str, int]]   # {handler_name: {outcome: count}}
-    task_duration_sec: Dict[str, Buckets]   # {handler_name: execution latency histogram}
-    task_wait_sec: Dict[str, Buckets]       # {handler_name: queue latency histogram}
+    task_total: dict[str, dict[str, int]]    # {handler_name: {outcome: count}}
+    task_duration_sec: dict[str, Buckets]    # {handler_name: execution latency histogram}
+    task_wait_sec: dict[str, Buckets]        # {handler_name: queue latency histogram}
 ```
 
 ### Buckets
@@ -89,7 +89,7 @@ class MetricsSnapshot(BaseModel):
 class Buckets(BaseModel):
     count: int                # Total observations
     sum: float                # Sum of observed values (seconds)
-    buckets: Dict[str, int]   # {upper_bound_string: count}
+    buckets: dict[str, int]    # {upper_bound_string: count}
     inf: int                  # Samples exceeding the largest bucket bound
 ```
 

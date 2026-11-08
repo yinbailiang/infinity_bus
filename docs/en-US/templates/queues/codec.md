@@ -10,7 +10,7 @@ before put, decode + rebuild before get).
 
 ## Why it is needed
 
-`Event.data` is annotated as abstract `Optional[BaseModel]`; Pydantic 2 installs a
+`Event.data` is annotated as abstract `BaseModel | None`; Pydantic 2 installs a
 **mock serializer/validator** for abstract BaseModel fields:
 
 1. `Event.model_dump_json()` dumps the real payload as an empty object `{}`;

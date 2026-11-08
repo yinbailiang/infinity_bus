@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import uuid
-from typing import Any, Dict, Optional, Type, cast
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
 
@@ -27,7 +27,7 @@ class ResponseProtocol(BaseModel):
     session_id: str = Field(description='会话ID')
     request_id: str = Field(description='请求ID')
     success: bool = Field(default=True, description='操作是否成功')
-    error_msg: Optional[str] = Field(default=None, description='失败时的错误信息')
+    error_msg: str | None = Field(default=None, description='失败时的错误信息')
 
     def raise_if_failed(self) -> None:
         """若响应失败则抛出 RuntimeError。"""
@@ -49,28 +49,28 @@ def build_response(request: RequestProtocol, response_type: type[ResponseProtoco
 async def request(
     bus_proxy: EventBus.Proxy,
     req_event: str,
-    req_data: Dict[str, Any],
+    req_data: dict[str, Any],
     resp_event: str,
-    session_id: Optional[str] = None,
-    timeout: Optional[float] = 60.0,
+    session_id: str | None = None,
+    timeout: float | None = 60.0,
 ) -> ResponseProtocol:
     """发布请求事件并等待匹配的响应，实现事件总线上的 RPC 调用。
 
     自动注入 session_id 和 request_id，通过 ``expect`` 等待匹配的响应事件。
     """
-    req_decl: Optional[Type[EventDeclaration]] = bus_proxy.events_registry.get(req_event)
+    req_decl: type[EventDeclaration] | None = bus_proxy.events_registry.get(req_event)
     if req_decl is None:
         raise ValueError(f"请求事件 '{req_event}' 未注册")
     if req_decl.payload_type is None or not issubclass(req_decl.payload_type, RequestProtocol):
         raise TypeError(f"请求事件 '{req_event}' 负载必须继承 RequestProtocol")
 
-    resp_decl: Optional[Type[EventDeclaration]] = bus_proxy.events_registry.get(resp_event)
+    resp_decl: type[EventDeclaration] | None = bus_proxy.events_registry.get(resp_event)
     if resp_decl is None:
         raise ValueError(f"响应事件 '{resp_event}' 未注册")
     if resp_decl.payload_type is None or not issubclass(resp_decl.payload_type, ResponseProtocol):
         raise TypeError(f"响应事件 '{resp_event}' 负载必须继承 ResponseProtocol")
 
-    payload_data: Dict[str, Any] = req_data.copy()
+    payload_data: dict[str, Any] = req_data.copy()
     session_id = session_id if session_id is not None else uuid.uuid4().hex
     request_id: str = uuid.uuid4().hex
     payload_data['session_id'] = session_id
@@ -82,7 +82,7 @@ async def request(
         若 payload 类型不匹配，抛出 TypeError 以便通过 ``expect`` 的 future
         立即传播错误，而非让调用方等待超时。
         """
-        payload: Optional[BaseModel] = event.data
+        payload: BaseModel | None = event.data
         if not isinstance(payload, ResponseProtocol):
             # 此分支不应当发生，防御，防止总线带病
             raise TypeError(

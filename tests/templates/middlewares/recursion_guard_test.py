@@ -1,7 +1,7 @@
 """递归防护中间件测试：RecursionGuardMiddleware。"""
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pytest
 from conftest import SimplePingHandler
@@ -33,8 +33,8 @@ class ChainPublishingHandler(EventHandler):
     def __init__(
         self,
         publish_event: str,
-        publish_data: Optional[Dict[str, Any]] = None,
-        subscriptions: Optional[List[str | Regex]] = None,
+        publish_data: dict[str, Any] | None = None,
+        subscriptions: list[str | Regex] | None = None,
     ):
         super().__init__(subscriptions=subscriptions or ['mw.ping'])
         self._pub_event = publish_event
@@ -43,7 +43,7 @@ class ChainPublishingHandler(EventHandler):
 
     async def handle(
         self,
-        payload: Optional[BaseModel],
+        payload: BaseModel | None,
         bus_proxy: EventBus.Proxy,
         raw_event: Event,
     ) -> None:
@@ -191,14 +191,14 @@ class TestRecursionGuardMiddleware:
             def __init__(self):
                 super().__init__(['mw.ping'])
 
-            async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+            async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
                 await bus_proxy.publish('mw.ping', {'key': 'from_a', 'count': 1})
 
         class HandlerB(EventHandler):
             def __init__(self):
                 super().__init__(['mw.ping'])
 
-            async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+            async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
                 await bus_proxy.publish('mw.ping', {'key': 'from_b', 'count': 2})
 
         await handler_registry.register(HandlerA())

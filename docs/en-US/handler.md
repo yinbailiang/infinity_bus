@@ -16,8 +16,8 @@ Abstract base class. All business handlers must subclass and implement `handle()
 class EventHandler(ABC):
     def __init__(
         self,
-        subscriptions: Optional[List[Regex | str]] = None,
-        handle_timeout: Optional[float] = 32.0
+        subscriptions: list[Regex | str] | None = None,
+        handle_timeout: float | None = 32.0
     ) -> None
 
     async def __call__(self, bus: EventBus, event: Event) -> None
@@ -25,13 +25,13 @@ class EventHandler(ABC):
     @abstractmethod
     async def handle(
         self,
-        payload: Optional[BaseModel],
+        payload: BaseModel | None,
         bus_proxy: EventBus.Proxy,
         raw_event: Event
     ) -> None: ...
 
     @property
-    def handler_id(self) -> Optional[str]: ...
+    def handler_id(self) -> str | None: ...
 
     async def on_registered(self, handler_id: str) -> None: ...
     async def on_unregistered(self) -> None: ...
@@ -73,7 +73,7 @@ class MyHandler(EventHandler):
 ```python
 async def handle(
     self,
-    payload: Optional[BaseModel],      # Typed payload (None if event has no payload)
+    payload: BaseModel | None,         # Typed payload (None if event has no payload)
     bus_proxy: EventBus.Proxy,          # Proxy for publishing follow-up events
     raw_event: Event                    # Full event metadata (id, sources, timestamps)
 ) -> None:
@@ -133,7 +133,7 @@ class EventHandlerRegistry:
     async def unregister(self, handler_id: str) -> Exception | None
     async def activate(self, bus: EventBus) -> None
     async def deactivate(self, strict: bool = False) -> list[tuple[str, Exception]]
-    def get(self, handler_id: str) -> Optional[EventHandler]
+    def get(self, handler_id: str) -> EventHandler | None
     async def clear(self) -> list[tuple[str, Exception]]
 
     def __len__(self) -> int
@@ -145,7 +145,7 @@ class EventHandlerRegistry:
     @property
     def handlers_count(self) -> int
     @property
-    def all_handlers(self) -> Dict[str, EventHandler]
+    def all_handlers(self) -> dict[str, EventHandler]
 ```
 
 | Method/Property | Description |
@@ -165,7 +165,7 @@ class EventHandlerRegistry:
 > and one registry cannot be bound to two buses at the same time.
 | `version` | Monotonic version, incremented on every change (add/remove/clear). Used by [Router](router.md) for invalidation. |
 | `handlers_count` | Total number of registered handlers. |
-| `all_handlers` | Snapshot copy of all registered handlers as `Dict[str, EventHandler]`. |
+| `all_handlers` | Snapshot copy of all registered handlers as `dict[str, EventHandler]`. |
 
 ### Usage
 

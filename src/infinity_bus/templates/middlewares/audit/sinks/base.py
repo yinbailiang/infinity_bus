@@ -1,8 +1,7 @@
 """审计日志存储后端接口。"""
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
-from typing import Callable
+from collections.abc import Callable, Sequence
 
 from ..record import AuditRecord
 

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 BeforePublishNext = Callable[
-    [EventRegistry, str, str, Dict[str, Any] | BaseModel | None, Event | None],
+    [EventRegistry, str, str, dict[str, Any] | BaseModel | None, Event | None],
     Awaitable[None],
 ]
 """before_publish 链中 next 回调的签名"""
@@ -28,7 +29,7 @@ OnPublishNext = Callable[
 """on_publish 链中 next 回调的签名"""
 
 OnPublishErrorNext = Callable[
-    [Exception, str, str, Dict[str, Any] | BaseModel | None],
+    [Exception, str, str, dict[str, Any] | BaseModel | None],
     Awaitable[None],
 ]
 """on_publish_error 链中 next 回调的签名"""
@@ -51,10 +52,10 @@ class TaskRecord(BaseModel):
     event: Event = Field(description='触发本次任务的原始事件')
     dispatched_at: datetime = Field(description='任务创建（派发）时刻（UTC）')
     started_at: datetime = Field(description='获取并发信号量、开始执行的时刻（UTC）')
-    outcome: Optional[TaskOutcome] = Field(default=None, description='任务结果（on_task_done 时补齐）')
-    duration_seconds: Optional[float] = Field(default=None, description='开始执行到结束的时长（秒）')
-    error_type: Optional[str] = Field(default=None, description='异常类型名（outcome=error 时）')
-    error_message: Optional[str] = Field(default=None, description='异常消息（outcome=error 时）')
+    outcome: TaskOutcome | None = Field(default=None, description='任务结果（on_task_done 时补齐）')
+    duration_seconds: float | None = Field(default=None, description='开始执行到结束的时长（秒）')
+    error_type: str | None = Field(default=None, description='异常类型名（outcome=error 时）')
+    error_message: str | None = Field(default=None, description='异常消息（outcome=error 时）')
 
 
 DispatchNext = Callable[[Event, list[str]], Awaitable[None]]

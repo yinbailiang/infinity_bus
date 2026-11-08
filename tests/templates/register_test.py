@@ -1,6 +1,6 @@
 """ModuleEventRegister 和 ModuleHandlerRegister 的单元测试"""
 
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 
 import pytest
 from pydantic import BaseModel
@@ -79,7 +79,7 @@ class _SimpleHandler(EventHandler):
 
 
 class _AnotherHandler(EventHandler):
-    def __init__(self, db: Optional[Any] = None):
+    def __init__(self, db: Any | None = None):
         super().__init__(subscriptions=['test.another'])
         self.db = db
 
@@ -228,7 +228,7 @@ class TestModuleHandlerRegister:
     def test_add_handler_same_entry_idempotent(self, module_handlers: ModuleHandlerRegister) -> None:
         """同一个 (handler_type, depends) 重复添加不应产生重复"""
 
-        def dep() -> Dict[str, Any]:
+        def dep() -> dict[str, Any]:
             return {'extra': 'hi'}
 
         module_handlers.add_handler(_SimpleHandler, depends=dep)
@@ -262,7 +262,7 @@ class TestModuleHandlerRegister:
     def test_handler_decorator_with_custom_depends(self, module_handlers: ModuleHandlerRegister) -> None:
         """装饰器接受 depends 参数并存储"""
 
-        def factory() -> Dict[str, Any]:
+        def factory() -> dict[str, Any]:
             return {'extra': 'injected'}
 
         decorator = module_handlers.handler(depends=factory)
@@ -365,7 +365,7 @@ class TestModuleHandlerRegister:
             empty_event_registry.register(evt)
         call_count = 0
 
-        def counting_factory() -> Dict[str, Any]:
+        def counting_factory() -> dict[str, Any]:
             nonlocal call_count
             call_count += 1
             return {'extra': str(call_count)}
@@ -393,7 +393,7 @@ class TestModuleHandlerRegister:
         for evt in _EXTRA_EVENT_DECLS:
             empty_event_registry.register(evt)
 
-        def _failing_factory() -> Dict[str, Any]:
+        def _failing_factory() -> dict[str, Any]:
             raise RuntimeError('依赖工厂故意失败')
 
         reg = ModuleHandlerRegister('test')
@@ -428,7 +428,7 @@ class TestModuleHandlerRegister:
     ) -> None:
         """所有处理器注册均失败时也不应抛出异常，注册表保持为空"""
 
-        def _failing_factory() -> Dict[str, Any]:
+        def _failing_factory() -> dict[str, Any]:
             raise RuntimeError('全部失败')
 
         reg = ModuleHandlerRegister('test')
@@ -469,7 +469,7 @@ class TestModuleHandlerRegister:
         for evt in _EXTRA_EVENT_DECLS:
             empty_event_registry.register(evt)
 
-        def _failing_factory() -> Dict[str, Any]:
+        def _failing_factory() -> dict[str, Any]:
             raise RuntimeError('依赖工厂故意失败')
 
         reg = ModuleHandlerRegister('test')
@@ -493,7 +493,7 @@ class TestModuleHandlerRegister:
         for evt in _EXTRA_EVENT_DECLS:
             empty_event_registry.register(evt)
 
-        def _failing_factory() -> Dict[str, Any]:
+        def _failing_factory() -> dict[str, Any]:
             raise RuntimeError('第一个就失败')
 
         reg = ModuleHandlerRegister('test')

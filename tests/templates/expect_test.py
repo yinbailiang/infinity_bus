@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -187,7 +188,7 @@ async def test_expect_timeout_while_waiting(running_bus: EventBus) -> None:
 async def test_expect_context_exit_cancels_future(running_bus: EventBus) -> None:
     """如果上下文退出时 future 尚未完成，应自动取消 future"""
     proxy = running_bus.proxy('test')
-    future_ref: Optional[asyncio.Future[Any]] = None
+    future_ref: asyncio.Future[Any] | None = None
 
     async with expect(proxy, 'test.event') as future:
         future_ref = future
@@ -290,7 +291,7 @@ async def test_one_shot_handler_filter_exception_without_on_error() -> None:
 @pytest.mark.asyncio
 async def test_one_shot_handler_direct_usage() -> None:
     """直接测试 OneShotEventHandler 的基本行为（不通过 expect）"""
-    matched_event: Optional[Event] = None
+    matched_event: Event | None = None
 
     def on_match(event: Event) -> None:
         nonlocal matched_event

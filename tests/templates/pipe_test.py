@@ -1,5 +1,5 @@
 import asyncio
-from typing import AsyncGenerator, List, Optional, Tuple
+from collections.abc import AsyncGenerator
 
 import pytest
 from pydantic import BaseModel
@@ -95,7 +95,7 @@ async def event_bus() -> AsyncGenerator[EventBus, None]:
 
 
 @pytest.fixture
-async def pipe_pair(event_bus: EventBus) -> AsyncGenerator[Tuple[Pipe, Pipe], None]:
+async def pipe_pair(event_bus: EventBus) -> AsyncGenerator[tuple[Pipe, Pipe], None]:
     """
     通过 open_pipe 和 expect_pipe 建立一对连接好的管道，
     返回 (client_pipe, server_pipe)。
@@ -270,7 +270,7 @@ async def test_drain_on_close_does_not_lose_data(pipe_pair: tuple[Pipe, Pipe]) -
     close_task: asyncio.Task[None] = asyncio.create_task(client.close())
 
     # 服务端应该能收到全部 5 条消息
-    received_values: List[int] = []
+    received_values: list[int] = []
     for _ in range(5):
         try:
             r: BaseModel = await server.receive()
@@ -440,7 +440,7 @@ async def test_pipe_id_collision_prevention(event_bus: EventBus) -> None:
 
     # 分配一个管道
     pipe_id: str = await allocator.allocate()
-    pipe: Optional[Pipe] = await allocator.get(pipe_id)
+    pipe: Pipe | None = await allocator.get(pipe_id)
     assert pipe is not None
     assert isinstance(pipe, InProcessPipe)
 

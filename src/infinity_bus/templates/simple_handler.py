@@ -1,15 +1,16 @@
 """函数到 :class:`EventHandler` 的装饰器转换：将同步/异步函数自动包装为事件处理器。"""
 
+from collections.abc import Awaitable, Callable
 from inspect import isawaitable, signature
-from typing import Any, Awaitable, Callable, Optional, Type, Union, cast
+from typing import Any, cast
 
 from pydantic import BaseModel
 
 from .. import Event, EventBus, EventDeclaration, EventHandler
 
-NoPayloadHandlerFunc = Callable[[], Union[Awaitable[None], None]]
-PayloadHandlerFunc = Callable[[Any], Union[Awaitable[None], None]]
-HandlerFunc = Union[NoPayloadHandlerFunc, PayloadHandlerFunc]
+NoPayloadHandlerFunc = Callable[[], Awaitable[None] | None]
+PayloadHandlerFunc = Callable[[Any], Awaitable[None] | None]
+HandlerFunc = NoPayloadHandlerFunc | PayloadHandlerFunc
 
 
 class GenericEventHandler(EventHandler):
@@ -18,15 +19,15 @@ class GenericEventHandler(EventHandler):
 
 
 def handler(
-    event_decl: Type[EventDeclaration],
+    event_decl: type[EventDeclaration],
     *,
-    handle_timeout: Optional[float] = 32.0,
-) -> Callable[[HandlerFunc], Type[GenericEventHandler]]:
+    handle_timeout: float | None = 32.0,
+) -> Callable[[HandlerFunc], type[GenericEventHandler]]:
     """将异步函数转换为 :class:`EventHandler` 子类的装饰器。"""
 
     event_name: str = event_decl.name
 
-    def decorator(func: HandlerFunc) -> Type[GenericEventHandler]:
+    def decorator(func: HandlerFunc) -> type[GenericEventHandler]:
         """校验函数签名并生成对应的 :class:`EventHandler` 子类。"""
         sig = signature(func)
         params = list(sig.parameters.values())
@@ -62,7 +63,7 @@ def handler(
             def __init__(self) -> None:
                 EventHandler.__init__(self, subscriptions=[event_decl.name], handle_timeout=handle_timeout)
 
-            async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+            async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
                 if _func_has_params:
                     assert event_decl.payload_type is not None
                     assert payload is not None

@@ -24,10 +24,10 @@ Collects `EventDeclaration` subclasses and registers them in batch.
 ```python
 class ModuleEventRegister:
     def __init__(self, name: str) -> None
-    def add_event(self, event_decl: Type[EventDeclaration]) -> None
+    def add_event(self, event_decl: type[EventDeclaration]) -> None
     def event(self, event_cls: EventDeclT) -> EventDeclT
     def register_all_events(self, event_registry: EventRegistry) -> None
-    def get_all_event_names(self) -> List[str]
+    def get_all_event_names(self) -> list[str]
 ```
 
 | Member | Description |
@@ -50,12 +50,12 @@ class ModuleHandlerRegister:
     def __init__(self, name: str) -> None
     def add_handler(
         self,
-        handler_type: Type[EventHandler],
-        depends: Callable[[], Dict[str, Any]]
+        handler_type: type[EventHandler],
+        depends: Callable[[], dict[str, Any]]
     ) -> None
     def handler(
         self,
-        depends: Callable[[], Dict[str, Any]] = lambda: {}
+        depends: Callable[[], dict[str, Any]] = lambda: {}
     ) -> Callable[[HandlerT], HandlerT]
     async def register_all_handlers(
         self, handler_registry: EventHandlerRegistry, *, atomic: bool = False

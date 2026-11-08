@@ -1,11 +1,12 @@
 import logging
-from typing import Any, Callable, Dict, List, Set, Tuple, Type, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from .. import EventDeclaration, EventHandler, EventHandlerRegistry, EventRegistry
 
 logger = logging.getLogger(__name__)
 
-EventDeclT = TypeVar('EventDeclT', bound=Type[EventDeclaration])
+EventDeclT = TypeVar('EventDeclT', bound=type[EventDeclaration])
 
 
 class ModuleEventRegister:
@@ -26,9 +27,9 @@ class ModuleEventRegister:
 
     def __init__(self, name: str) -> None:
         self.name: str = name
-        self.events: Set[Type[EventDeclaration]] = set()
+        self.events: set[type[EventDeclaration]] = set()
 
-    def add_event(self, event_decl: Type[EventDeclaration]) -> None:
+    def add_event(self, event_decl: type[EventDeclaration]) -> None:
         """手动添加事件声明类"""
         if event_decl not in self.events:
             self.events.add(event_decl)
@@ -62,14 +63,14 @@ class ModuleEventRegister:
         for event_decl in self.events:
             event_registry.register(event_decl)
 
-    def get_all_event_names(self) -> List[str]:
+    def get_all_event_names(self) -> list[str]:
         return [e.name for e in self.events]
 
     def __repr__(self) -> str:
         return f'<ModuleEventRegister name={self.name} events={len(self.events)}>'
 
 
-HandlerT = TypeVar('HandlerT', bound=Type[EventHandler])
+HandlerT = TypeVar('HandlerT', bound=type[EventHandler])
 
 
 class ModuleHandlerRegister:
@@ -93,9 +94,9 @@ class ModuleHandlerRegister:
     def __init__(self, name: str) -> None:
         self.name: str = name
         # 存储 (处理器类, 依赖工厂函数) 的元组
-        self.handlers: Set[Tuple[Type[EventHandler], Callable[[], Dict[str, Any]]]] = set()
+        self.handlers: set[tuple[type[EventHandler], Callable[[], dict[str, Any]]]] = set()
 
-    def add_handler(self, handler_type: Type[EventHandler], depends: Callable[[], Dict[str, Any]]) -> None:
+    def add_handler(self, handler_type: type[EventHandler], depends: Callable[[], dict[str, Any]]) -> None:
         """
         手动添加处理器类型及其依赖工厂函数。
 
@@ -103,11 +104,11 @@ class ModuleHandlerRegister:
             handler_type: 继承自 EventHandler 的类
             depends: 返回依赖字典的可调用对象，字典键为构造器参数名
         """
-        handler_entry: Tuple[Type[EventHandler], Callable[[], Dict[str, Any]]] = (handler_type, depends)
+        handler_entry: tuple[type[EventHandler], Callable[[], dict[str, Any]]] = (handler_type, depends)
         if handler_entry not in self.handlers:
             self.handlers.add(handler_entry)
 
-    def handler(self, depends: Callable[[], Dict[str, Any]] = lambda: {}) -> Callable[[HandlerT], HandlerT]:
+    def handler(self, depends: Callable[[], dict[str, Any]] = lambda: {}) -> Callable[[HandlerT], HandlerT]:
         """
         装饰器工厂：返回一个类装饰器，用于将处理器类自动添加到注册器中。
 
@@ -150,11 +151,11 @@ class ModuleHandlerRegister:
             Exception: 当 ``atomic=True`` 且任一处理器注册失败时，
                        重新抛出导致失败的原始异常
         """
-        registered_ids: List[str] = []
+        registered_ids: list[str] = []
         for handler_type, depends_factory in self.handlers:
             try:
                 # 调用依赖工厂获取参数字典
-                kwargs: Dict[str, Any] = depends_factory()
+                kwargs: dict[str, Any] = depends_factory()
                 # 实例化处理器并注册
                 handler_instance: EventHandler = handler_type(**kwargs)
                 hid = await handler_registry.register(handler_instance)

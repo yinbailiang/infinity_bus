@@ -59,7 +59,7 @@ from __future__ import annotations
 import importlib
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -88,7 +88,7 @@ class Buckets(BaseModel):
 
     count: int = Field(default=0, description='观测总数')
     sum: float = Field(default=0.0, description='观测值总和（秒）')
-    buckets: Dict[str, int] = Field(default_factory=dict, description='{上界字符串: 计数}')
+    buckets: dict[str, int] = Field(default_factory=dict, description='{上界字符串: 计数}')
     inf: int = Field(default=0, description='超出最大桶上界的样本数')
 
 
@@ -97,7 +97,7 @@ class _Histogram:
 
     def __init__(self, bounds: tuple[float, ...] = _DEFAULT_BUCKETS) -> None:
         self._bounds = bounds
-        self._buckets: List[int] = [0] * len(bounds)
+        self._buckets: list[int] = [0] * len(bounds)
         self._count = 0
         self._sum = 0.0
         self._inf = 0
@@ -115,7 +115,7 @@ class _Histogram:
             self._inf += 1
 
     def snapshot(self) -> Buckets:
-        buckets: Dict[str, int] = {}
+        buckets: dict[str, int] = {}
         for i, bound in enumerate(self._bounds):
             buckets[str(bound)] = self._buckets[i]
         return Buckets(
@@ -134,14 +134,14 @@ class _Histogram:
 class MetricsSnapshot(BaseModel):
     """一次指标快照（只读）。"""
 
-    publish_total: Dict[str, int] = Field(default_factory=dict, description='{事件名: 发布次数}')
-    publish_duration_sec: Dict[str, Buckets] = Field(default_factory=dict, description='{事件名: 延迟直方图}')
+    publish_total: dict[str, int] = Field(default_factory=dict, description='{事件名: 发布次数}')
+    publish_duration_sec: dict[str, Buckets] = Field(default_factory=dict, description='{事件名: 延迟直方图}')
     publish_errors_total: int = Field(default=0, description='发布失败总数')
     queue_size: int = Field(default=0, description='当前队列深度')
     active_tasks: int = Field(default=0, description='当前活跃处理器任务数')
-    task_total: Dict[str, Dict[str, int]] = Field(default_factory=dict, description='{处理器名: {任务结果: 次数}}')
-    task_duration_sec: Dict[str, Buckets] = Field(default_factory=dict, description='{处理器名: 任务执行时长直方图}')
-    task_wait_sec: Dict[str, Buckets] = Field(default_factory=dict, description='{处理器名: 排队时长直方图}')
+    task_total: dict[str, dict[str, int]] = Field(default_factory=dict, description='{处理器名: {任务结果: 次数}}')
+    task_duration_sec: dict[str, Buckets] = Field(default_factory=dict, description='{处理器名: 任务执行时长直方图}')
+    task_wait_sec: dict[str, Buckets] = Field(default_factory=dict, description='{处理器名: 排队时长直方图}')
 
 
 # ============================================================================
@@ -165,19 +165,19 @@ class MetricsMiddleware(Middleware):
         self._histogram_bounds = histogram_bounds
 
         # Counter: 按事件名计数
-        self._publish_total: Dict[str, int] = {}
+        self._publish_total: dict[str, int] = {}
         # Histogram: 按事件名
-        self._publish_duration: Dict[str, _Histogram] = {}
+        self._publish_duration: dict[str, _Histogram] = {}
         # Counter: 失败
         self._publish_errors_total = 0
         # Counter: 按处理器与结果（success / error / cancelled / skipped）
-        self._task_total: Dict[str, Dict[str, int]] = {}
+        self._task_total: dict[str, dict[str, int]] = {}
         # Histogram: 按处理器 —— 执行时长 / 排队时长
-        self._task_duration: Dict[str, _Histogram] = {}
-        self._task_wait: Dict[str, _Histogram] = {}
+        self._task_duration: dict[str, _Histogram] = {}
+        self._task_wait: dict[str, _Histogram] = {}
 
         # 总线引用（on_setup 注入），用于读取队列/活跃任务
-        self._bus: Optional[EventBus] = None
+        self._bus: EventBus | None = None
 
         # —— Prometheus SDK 集成（惰性创建） ——
         self._prom_registry: Any = None
@@ -217,7 +217,7 @@ class MetricsMiddleware(Middleware):
     # 内部：直方图观测
     # ------------------------------------------------------------------
 
-    def _observe(self, histograms: Dict[str, _Histogram], key: str, value: float) -> _Histogram:
+    def _observe(self, histograms: dict[str, _Histogram], key: str, value: float) -> _Histogram:
         """按键观测一次直方图（惰性创建）。"""
         hist = histograms.get(key)
         if hist is None:
@@ -235,7 +235,7 @@ class MetricsMiddleware(Middleware):
         event_registry: EventRegistry,
         name: str,
         source: str,
-        data: Dict[str, Any] | BaseModel | None,
+        data: dict[str, Any] | BaseModel | None,
         old_event: Event | None,
         next: BeforePublishNext,
     ) -> None:
@@ -487,9 +487,9 @@ class MetricsMiddleware(Middleware):
 
     def snapshot(self) -> MetricsSnapshot:
         """返回当前所有指标的只读快照。"""
-        duration_snap: Dict[str, Buckets] = {name: hist.snapshot() for name, hist in self._publish_duration.items()}
-        task_duration_snap: Dict[str, Buckets] = {name: hist.snapshot() for name, hist in self._task_duration.items()}
-        task_wait_snap: Dict[str, Buckets] = {name: hist.snapshot() for name, hist in self._task_wait.items()}
+        duration_snap: dict[str, Buckets] = {name: hist.snapshot() for name, hist in self._publish_duration.items()}
+        task_duration_snap: dict[str, Buckets] = {name: hist.snapshot() for name, hist in self._task_duration.items()}
+        task_wait_snap: dict[str, Buckets] = {name: hist.snapshot() for name, hist in self._task_wait.items()}
         return MetricsSnapshot(
             publish_total=dict(self._publish_total),
             publish_duration_sec=duration_snap,

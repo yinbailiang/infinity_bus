@@ -71,14 +71,14 @@ class MetricsMiddleware(Middleware):
 
 ```python
 class MetricsSnapshot(BaseModel):
-    publish_total: Dict[str, int]           # {事件名: 发布次数}
-    publish_duration_sec: Dict[str, Buckets] # {事件名: 延迟直方图}
+    publish_total: dict[str, int]            # {事件名: 发布次数}
+    publish_duration_sec: dict[str, Buckets] # {事件名: 延迟直方图}
     publish_errors_total: int               # 发布失败总数
     queue_size: int                         # 当前队列深度
     active_tasks: int                       # 当前活跃处理器任务数
-    task_total: Dict[str, Dict[str, int]]   # {处理器名: {结果: 次数}}
-    task_duration_sec: Dict[str, Buckets]   # {处理器名: 执行时长直方图}
-    task_wait_sec: Dict[str, Buckets]       # {处理器名: 排队时长直方图}
+    task_total: dict[str, dict[str, int]]    # {处理器名: {结果: 次数}}
+    task_duration_sec: dict[str, Buckets]    # {处理器名: 执行时长直方图}
+    task_wait_sec: dict[str, Buckets]        # {处理器名: 排队时长直方图}
 ```
 
 ### Buckets
@@ -87,7 +87,7 @@ class MetricsSnapshot(BaseModel):
 class Buckets(BaseModel):
     count: int                # 观测总数
     sum: float                # 观测值总和（秒）
-    buckets: Dict[str, int]   # {上界字符串: 计数}
+    buckets: dict[str, int]    # {上界字符串: 计数}
     inf: int                  # 超出最大桶上界的样本数
 ```
 

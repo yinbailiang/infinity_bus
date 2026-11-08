@@ -78,9 +78,9 @@ await source_bus.proxy("svc").publish("order.created", {...})
 class EventForwardMiddleware(Middleware):
     def __init__(
         self,
-        target: Union[EventBus, TargetBusProvider],
+        target: EventBus | TargetBusProvider,
         source_name: str = "event_forward",
-        event_filter: Optional[EventFilter] = None,
+        event_filter: EventFilter | None = None,
         forward_system_events: bool = False,
     ) -> None
 ```
@@ -89,7 +89,7 @@ class EventForwardMiddleware(Middleware):
 | - | - | - | - |
 | `target` | `EventBus \| TargetBusProvider` | (必需) | 目标总线或返回目标总线的回调。 |
 | `source_name` | `str` | `"event_forward"` | 在目标总线上发布时使用的来源标识。 |
-| `event_filter` | `Optional[EventFilter]` | `None` | 事件过滤回调，`None` 时转发所有非系统事件。 |
+| `event_filter` | `EventFilter \| None` | `None` | 事件过滤回调，`None` 时转发所有非系统事件。 |
 | `forward_system_events` | `bool` | `False` | 是否转发 `infinity_bus.*` 系统事件。 |
 
 ## 使用模式
@@ -144,7 +144,7 @@ fw = EventForwardMiddleware(target=other_bus, event_filter=async_filter)
 ### `EventFilter`
 
 ```python
-EventFilter = Callable[[Event], Union[bool, Awaitable[bool]]]
+EventFilter = Callable[[Event], bool | Awaitable[bool]]
 ```
 
 事件过滤回调签名：接收 `Event` 对象，同步或异步返回 `bool`。
@@ -152,7 +152,7 @@ EventFilter = Callable[[Event], Union[bool, Awaitable[bool]]]
 ### `TargetBusProvider`
 
 ```python
-TargetBusProvider = Callable[[], Union[EventBus, Awaitable[EventBus]]]
+TargetBusProvider = Callable[[], EventBus | Awaitable[EventBus]]
 ```
 
 目标总线提供者签名：同步或异步返回 `EventBus` 实例。

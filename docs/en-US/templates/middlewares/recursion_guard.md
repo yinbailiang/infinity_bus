@@ -32,16 +32,16 @@ class RecursionGuardMiddleware(Middleware):
     def __init__(
         self,
         max_depth: int = 3,
-        max_chain_length: Optional[int] = 50,
-        ignore_sources: Optional[Set[str]] = None,
+        max_chain_length: int | None = 50,
+        ignore_sources: set[str] | None = None,
     ) -> None
 ```
 
 | Parameter | Type | Description |
 | - | - | - |
 | `max_depth` | `int` | Maximum times the same `source` may appear in the event chain's `sources`. Default `3`. |
-| `max_chain_length` | `Optional[int]` | Absolute maximum event chain length. Default `50`. Set to `None` to disable this check. |
-| `ignore_sources` | `Optional[Set[str]]` | Publisher names excluded from per-source counting. Does not affect absolute chain length checks. |
+| `max_chain_length` | `int \| None` | Absolute maximum event chain length. Default `50`. Set to `None` to disable this check. |
+| `ignore_sources` | `set[str] \| None` | Publisher names excluded from per-source counting. Does not affect absolute chain length checks. |
 
 ### RecursionDetectedError
 

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Optional, cast
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -31,7 +31,7 @@ async def test_handler_register_crud(handler_registry: EventHandlerRegistry):
 
         async def handle(
             self,
-            payload: Optional[BaseModel],
+            payload: BaseModel | None,
             bus_proxy: Any,
             raw_event: Event,
         ) -> None:
@@ -63,7 +63,7 @@ async def test_handler_subscriptions_copy():
         def __init__(self):
             super().__init__(subs)
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             pass
 
     handler = MyHandler()
@@ -131,13 +131,13 @@ def test_regex_fullmatch():
 @pytest.mark.asyncio
 async def test_handler_call_delegates_to_handle(handler_registry: EventHandlerRegistry):
     """EventHandler.__call__ 应解包 event.data 并委托给 handle()"""
-    received_payload: Optional[BaseModel] = None
+    received_payload: BaseModel | None = None
 
     class CallTestHandler(EventHandler):
         def __init__(self):
             super().__init__(['test.call'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             nonlocal received_payload
             received_payload = payload
 
@@ -176,7 +176,7 @@ async def test_registry_len(handler_registry: EventHandlerRegistry):
         def __init__(self):
             super().__init__(['len.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             pass
 
     await handler_registry.register(LenHandler())
@@ -194,7 +194,7 @@ async def test_registry_contains(handler_registry: EventHandlerRegistry):
         def __init__(self):
             super().__init__(['contains.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             pass
 
     hid = await handler_registry.register(ContainsHandler())
@@ -210,7 +210,7 @@ async def test_registry_iter(handler_registry: EventHandlerRegistry):
         def __init__(self):
             super().__init__(['iter.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             pass
 
     h1 = IterHandler()
@@ -232,7 +232,7 @@ async def test_registry_clear(handler_registry: EventHandlerRegistry):
         def __init__(self):
             super().__init__(['clear.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             pass
 
     await handler_registry.register(ClearHandler())
@@ -255,7 +255,7 @@ class IdAwareHandler(EventHandler):
     def __init__(self):
         super().__init__(['id.event'])
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
         pass
 
 
@@ -296,7 +296,7 @@ async def test_handler_on_registered_override_receives_id(handler_registry: Even
         def __init__(self):
             super().__init__(['id.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             pass
 
         async def on_registered(self, handler_id: str) -> None:
@@ -310,13 +310,13 @@ async def test_handler_on_registered_override_receives_id(handler_registry: Even
 @pytest.mark.asyncio
 async def test_handler_on_unregistered_override_observes(handler_registry: EventHandlerRegistry):
     """子类覆写 on_unregistered 可感知注销事件"""
-    observed: list[Optional[str]] = []
+    observed: list[str | None] = []
 
     class OverridingHandler(EventHandler):
         def __init__(self):
             super().__init__(['id.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             pass
 
         async def on_unregistered(self) -> None:
@@ -371,7 +371,7 @@ class RaisingRegisterHandler(EventHandler):
     def __init__(self):
         super().__init__(['id.event'])
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
         pass
 
     async def on_registered(self, handler_id: str) -> None:
@@ -384,7 +384,7 @@ class RaisingUnregisterHandler(EventHandler):
     def __init__(self):
         super().__init__(['id.event'])
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
         pass
 
     async def on_unregistered(self) -> None:
@@ -458,7 +458,7 @@ class SourceProbeHandler(EventHandler):
     def __init__(self):
         super().__init__(['probe.event'])
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         pass
 
 
@@ -496,7 +496,7 @@ async def test_registry_destroy_triggers_clear():
         def __init__(self):
             super().__init__(['del.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
             pass
 
         async def on_unregistered(self) -> None:
@@ -529,7 +529,7 @@ class BusLifecycleHandler(EventHandler):
         self.fail_active = fail_active
         self.fail_deactivate = fail_deactivate
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         pass
 
     async def on_registered(self, handler_id: str) -> None:
@@ -696,7 +696,7 @@ async def test_registry_activate_supports_nested_register(handler_registry: Even
     class ActivateRegistersHandler(BusLifecycleHandler):
         def __init__(self):
             super().__init__()
-            self.sibling: Optional[BusLifecycleHandler] = None
+            self.sibling: BusLifecycleHandler | None = None
 
         async def on_activate(self, bus: Any) -> None:
             await super().on_activate(bus)
@@ -756,7 +756,7 @@ class _SubscribeThenRaiseHandler(EventHandler):
         self.fail_after_subscribe = fail_after_subscribe
         self.deactivate_calls = 0
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         pass
 
     async def on_activate(self, bus: Any) -> None:

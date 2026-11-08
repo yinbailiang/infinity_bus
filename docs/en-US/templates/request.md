@@ -32,7 +32,7 @@ base classes.
 - `session_id: str` — Must match the corresponding request's `session_id`.
 - `request_id: str` — Must match the corresponding request's `request_id`.
 - `success: bool` — Whether the business operation succeeded. Defaults to `True`.
-- `error_msg: Optional[str]` — Error message on failure.
+- `error_msg: str | None` — Error message on failure.
 
 ---
 
@@ -140,10 +140,10 @@ except RuntimeError as e:
 async def request(
     bus_proxy: EventBus.Proxy,
     req_event: str,
-    req_data: Dict[str, Any],
+    req_data: dict[str, Any],
     resp_event: str,
-    session_id: Optional[str] = None,
-    timeout: Optional[float] = 60.0,
+    session_id: str | None = None,
+    timeout: float | None = 60.0,
 ) -> ResponseProtocol
 ```
 
@@ -151,10 +151,10 @@ async def request(
 | - | - | - |
 | `bus_proxy` | `EventBus.Proxy` | Event bus proxy for publishing the request event. |
 | `req_event` | `str` | Request event name (must be registered and payload must extend `RequestProtocol`). |
-| `req_data` | `Dict[str, Any]` | Request payload data. `session_id` and `request_id` are auto-injected. |
+| `req_data` | `dict[str, Any]` | Request payload data. `session_id` and `request_id` are auto-injected. |
 | `resp_event` | `str` | Expected response event name (must be registered and payload must extend `ResponseProtocol`). |
-| `session_id` | `Optional[str]` | Session ID. Auto-generates a UUID if `None`. |
-| `timeout` | `Optional[float]` | Timeout in seconds for waiting. Raises `asyncio.TimeoutError` on expiry. `None` means indefinite wait. |
+| `session_id` | `str \| None` | Session ID. Auto-generates a UUID if `None`. |
+| `timeout` | `float \| None` | Timeout in seconds for waiting. Raises `asyncio.TimeoutError` on expiry. `None` means indefinite wait. |
 
 **Returns**: A `ResponseProtocol` instance (concrete type determined by the response
 event's `payload_type`).

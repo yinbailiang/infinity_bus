@@ -30,7 +30,7 @@ Two factory functions simplify common blocking scenarios:
 ### EventBlockMiddleware
 
 ```python
-BlockPredicate = Callable[[str, Dict[str, Any] | BaseModel | None], bool]
+BlockPredicate = Callable[[str, dict[str, Any] | BaseModel | None], bool]
 
 class EventBlockMiddleware(Middleware):
     def __init__(

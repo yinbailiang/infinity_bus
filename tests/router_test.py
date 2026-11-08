@@ -5,7 +5,7 @@
 """
 
 import asyncio
-from typing import Callable, Optional, Type
+from collections.abc import Callable
 
 from pydantic import BaseModel
 
@@ -38,7 +38,7 @@ class _EventGamma(EventDeclaration):
     name = 'test.gamma'
 
 
-def _make_registry(*decls: Type[EventDeclaration]) -> EventRegistry:
+def _make_registry(*decls: type[EventDeclaration]) -> EventRegistry:
     reg = EventRegistry()
     for d in decls:
         reg.register(d)
@@ -258,7 +258,7 @@ class _RecordNameHandler(EventHandler):
         super().__init__(subscriptions=subscriptions)
         self.received: list[str] = []
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: EventBus.Proxy, raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: EventBus.Proxy, raw_event: Event) -> None:
         self.received.append(raw_event.name)
 
 

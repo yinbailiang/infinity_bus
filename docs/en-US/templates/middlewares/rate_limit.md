@@ -47,7 +47,7 @@ class RateLimitMiddleware(Middleware):
 
 | Property | Type | Description |
 | - | - | - |
-| `current_rate` | `Dict[str, int]` | Returns a snapshot of current request counts per window. Key is the event name (or `"__global__"`), value is the count in the current window. |
+| `current_rate` | `dict[str, int]` | Returns a snapshot of current request counts per window. Key is the event name (or `"__global__"`), value is the count in the current window. |
 
 ---
 

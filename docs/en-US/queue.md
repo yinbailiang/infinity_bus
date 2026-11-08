@@ -82,17 +82,17 @@ class EventBus:
         self,
         event_registry: EventRegistry,
         handler_registry: EventHandlerRegistry,
-        queue: Optional[EventQueue] = None,   # injected queue; default InMemoryEventQueue()
-        router: Optional[Router] = None,      # injected router; default Router(event_registry)
+        queue: EventQueue | None = None,      # injected queue; default InMemoryEventQueue()
+        router: Router | None = None,         # injected router; default Router(event_registry)
         max_handler_semaphore: int = 256,
         shutdown: ShutdownConfig = ShutdownConfig(),
-        middleware_chain: Optional[MiddlewareChain] = None,
+        middleware_chain: MiddlewareChain | None = None,
     ) -> None
 ```
 
 | Parameter | Type | Default | Description |
 | - | - | - | - |
-| `queue` | `Optional[EventQueue]` | `None` | The internal dispatch queue. Defaults to the in-process implementation with its own default capacity. |
+| `queue` | `EventQueue \| None` | `None` | The internal dispatch queue. Defaults to the in-process implementation with its own default capacity. |
 
 > **Decoupling**: queue capacity and other settings live on the queue itself
 > (`InMemoryEventQueueConfig`). `EventBus` neither knows nor forwards any queue config.

@@ -27,7 +27,7 @@
 - `session_id: str` — 必须与对应请求的 `session_id` 一致。
 - `request_id: str` — 必须与对应请求的 `request_id` 一致。
 - `success: bool` — 业务处理是否成功，默认为 `True`。
-- `error_msg: Optional[str]` — 失败时的错误信息。
+- `error_msg: str | None` — 失败时的错误信息。
 
 ---
 
@@ -133,10 +133,10 @@ except RuntimeError as e:
 async def request(
     bus_proxy: EventBus.Proxy,
     req_event: str,
-    req_data: Dict[str, Any],
+    req_data: dict[str, Any],
     resp_event: str,
-    session_id: Optional[str] = None,
-    timeout: Optional[float] = 60.0,
+    session_id: str | None = None,
+    timeout: float | None = 60.0,
 ) -> ResponseProtocol
 ```
 
@@ -144,10 +144,10 @@ async def request(
 | - | - | - |
 | `bus_proxy` | `EventBus.Proxy` | 事件总线代理，用于发布请求事件。 |
 | `req_event` | `str` | 请求事件名称（必须在注册表中存在且负载继承 `RequestProtocol`）。 |
-| `req_data` | `Dict[str, Any]` | 请求负载数据，会自动注入 `session_id` 和 `request_id`。 |
+| `req_data` | `dict[str, Any]` | 请求负载数据，会自动注入 `session_id` 和 `request_id`。 |
 | `resp_event` | `str` | 期望的响应事件名称（必须在注册表中存在且负载继承 `ResponseProtocol`）。 |
-| `session_id` | `Optional[str]` | 会话ID，若为 `None` 则自动生成 UUID。 |
-| `timeout` | `Optional[float]` | 等待响应的超时时间（秒），超时抛出 `asyncio.TimeoutError`。`None` 表示无限等待。 |
+| `session_id` | `str \| None` | 会话ID，若为 `None` 则自动生成 UUID。 |
+| `timeout` | `float \| None` | 等待响应的超时时间（秒），超时抛出 `asyncio.TimeoutError`。`None` 表示无限等待。 |
 
 **返回值**：`ResponseProtocol` 实例（具体类型由响应事件声明的 `payload_type` 决定）。
 

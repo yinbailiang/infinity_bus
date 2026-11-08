@@ -22,16 +22,16 @@
 @asynccontextmanager
 async def expect(
     bus_proxy: EventBus.Proxy,
-    event_patterns: Union[str, Regex, List[Union[str, Regex]]],
-    filter_func: Optional[Callable[[Event], Union[Awaitable[bool], bool]]] = None,
+    event_patterns: str | Regex | list[str | Regex],
+    filter_func: Callable[[Event], Awaitable[bool] | bool] | None = None,
 ) -> AsyncGenerator[asyncio.Future[Event], None]
 ```
 
 | 参数 | 类型 | 说明 |
 | - | - | - |
 | `bus_proxy` | `EventBus.Proxy` | 事件总线代理，用于访问处理器注册表。 |
-| `event_patterns` | `str` \| `Regex` \| `List[str \| Regex]` | 监听的事件名模式。`str` 全字匹配，`Regex` 正则匹配。可传入单个或序列。 |
-| `filter_func` | `Optional[Callable]` | 可选过滤器。接收 `Event` 对象，返回布尔值（或可等待的布尔值），`True` 表示匹配成功。若省略，任何匹配 `event_patterns` 的事件都会触发。 |
+| `event_patterns` | `str` \| `Regex` \| `list[str \| Regex]` | 监听的事件名模式。`str` 全字匹配，`Regex` 正则匹配。可传入单个或序列。 |
+| `filter_func` | `Callable \| None` | 可选过滤器。接收 `Event` 对象，返回布尔值（或可等待的布尔值），`True` 表示匹配成功。若省略，任何匹配 `event_patterns` 的事件都会触发。 |
 
 **Yields**：一个 `asyncio.Future[Event]` 对象，`await` 它将返回匹配的完整 `Event` 实例。
 

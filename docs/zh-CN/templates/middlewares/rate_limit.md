@@ -44,7 +44,7 @@ class RateLimitMiddleware(Middleware):
 
 | 属性 | 类型 | 说明 |
 | - | - | - |
-| `current_rate` | `Dict[str, int]` | 返回当前各窗口的请求计数快照。键为事件名（或 `"__global__"`），值为当前窗口内的请求数。 |
+| `current_rate` | `dict[str, int]` | 返回当前各窗口的请求计数快照。键为事件名（或 `"__global__"`），值为当前窗口内的请求数。 |
 
 ---
 

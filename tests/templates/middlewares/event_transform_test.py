@@ -1,6 +1,6 @@
 """事件转换中间件测试：EventTransformMiddleware。"""
 
-from typing import Any, List, Optional
+from typing import Any
 
 import pytest
 from conftest import (
@@ -54,7 +54,7 @@ class TestEventTransformMiddleware:
         await chain.add(mw)
 
         # 监听重命名后的目标事件
-        received: List[str] = []
+        received: list[str] = []
 
         class TargetWatcher(SimplePingHandler):
             def __init__(self) -> None:
@@ -63,7 +63,7 @@ class TestEventTransformMiddleware:
 
             async def handle(
                 self,
-                payload: Optional[BaseModel],
+                payload: BaseModel | None,
                 bus_proxy: Any,
                 raw_event: Event,
             ) -> None:

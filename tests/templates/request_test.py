@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, cast
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -117,7 +117,7 @@ async def trigger_response(
 ) -> None:
     """手动触发已注册的响应处理器，模拟事件总线分发"""
     matcher = Matcher(event_registry, handler_registry)
-    handlers: List[tuple[str, EventHandler]] = matcher.match(resp_event)
+    handlers: list[tuple[str, EventHandler]] = matcher.match(resp_event)
     for _, handler in handlers:
         # 构造一个模拟的 Event 和 Proxy
         event = Event(name=resp_event, data=payload)

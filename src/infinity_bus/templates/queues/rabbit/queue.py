@@ -48,7 +48,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from infinity_bus import Event, EventQueue, EventRegistry
 
@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 # aio-pika 惰性导入 —— 仅 RabbitFanoutQueue.create 需要
 # ---------------------------------------------------------------------------
 _aio_pika: Any = None
-_aio_pika_import_error: Optional[ImportError] = None
+_aio_pika_import_error: ImportError | None = None
 
 try:
     import aio_pika as _aio_pika
@@ -141,8 +141,8 @@ class RabbitFanoutQueue(EventQueue):
         member_id: str,
         *,
         url: str = URL,
-        codec: Optional[EventCodec] = None,
-        registry: Optional[EventRegistry] = None,
+        codec: EventCodec | None = None,
+        registry: EventRegistry | None = None,
         strategy: Literal['restart', 'offline'] = 'restart',
         drain_timeout: float = 15.0,
     ) -> 'RabbitFanoutQueue':

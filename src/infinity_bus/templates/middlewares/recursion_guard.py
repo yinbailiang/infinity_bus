@@ -1,7 +1,7 @@
 """递归防护中间件 —— 双重检测，防止自递归和互递归。"""
 
 import logging
-from typing import Any, Dict, Optional, Set
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -50,8 +50,8 @@ class RecursionGuardMiddleware(Middleware):
     def __init__(
         self,
         max_depth: int = 3,
-        max_chain_length: Optional[int] = 50,
-        ignore_sources: Optional[Set[str]] = None,
+        max_chain_length: int | None = 50,
+        ignore_sources: set[str] | None = None,
     ) -> None:
         self.max_depth = max_depth
         self.max_chain_length = max_chain_length  # None → 禁用链长检查
@@ -70,7 +70,7 @@ class RecursionGuardMiddleware(Middleware):
         event_registry: EventRegistry,
         name: str,
         source: str,
-        data: Dict[str, Any] | BaseModel | None,
+        data: dict[str, Any] | BaseModel | None,
         old_event: Event | None,
         next: BeforePublishNext,
     ) -> None:

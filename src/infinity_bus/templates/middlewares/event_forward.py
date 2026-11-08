@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Awaitable, Callable
 from inspect import isawaitable
-from typing import Any, Awaitable, Callable, Dict, Literal, Optional, Set, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -15,10 +16,10 @@ from infinity_bus import (
 
 logger = logging.getLogger(__name__)
 
-EventFilter = Callable[[Event], Union[bool, Awaitable[bool]]]
+EventFilter = Callable[[Event], bool | Awaitable[bool]]
 """事件过滤回调签名：接收 Event，返回是否转发。"""
 
-TargetBusProvider = Callable[[], Union[EventBus, Awaitable[EventBus]]]
+TargetBusProvider = Callable[[], EventBus | Awaitable[EventBus]]
 """目标总线提供者签名：返回目标 EventBus 实例。"""
 
 
@@ -48,9 +49,9 @@ class EventForwardMiddleware(Middleware):
 
     def __init__(
         self,
-        target: Union[EventBus, TargetBusProvider],
+        target: EventBus | TargetBusProvider,
         source_name: str = 'event_forward',
-        event_filter: Optional[EventFilter] = None,
+        event_filter: EventFilter | None = None,
         forward_system_events: bool = False,
     ) -> None:
         self._target: EventBus | TargetBusProvider = target
@@ -68,7 +69,7 @@ class EventForwardMiddleware(Middleware):
         event_registry: EventRegistry,
         name: str,
         source: str,
-        data: Dict[str, Any] | BaseModel | None,
+        data: dict[str, Any] | BaseModel | None,
         old_event: Event | None,
         next: BeforePublishNext,
     ) -> None:
@@ -124,7 +125,7 @@ class EventForwardMiddleware(Middleware):
             return
 
         if event.data is not None:
-            forward_data: Optional[Dict[str, Any]] = event.data.model_dump()
+            forward_data: dict[str, Any] | None = event.data.model_dump()
         else:
             forward_data = None
 
@@ -148,7 +149,7 @@ class EventForwardMiddleware(Middleware):
     async def _resolve_target(self) -> EventBus:
         """解析目标总线实例"""
         if isinstance(self._target, EventBus):
-            raw: Union[EventBus, Awaitable[EventBus]] = self._target
+            raw: EventBus | Awaitable[EventBus] = self._target
         else:
             raw = self._target()
         if isawaitable(raw):
@@ -177,7 +178,7 @@ def make_event_name_filter(
 ) -> EventFilter:
     """创建一个基于事件名的过滤回调。"""
 
-    name_set: Set[str] = set(event_names)
+    name_set: set[str] = set(event_names)
 
     match mode:
         case 'white':
@@ -195,12 +196,12 @@ def make_event_name_filter(
 
 
 def make_bidirectional_forward(
-    bus_a: Union[EventBus, TargetBusProvider],
-    bus_b: Union[EventBus, TargetBusProvider],
+    bus_a: EventBus | TargetBusProvider,
+    bus_b: EventBus | TargetBusProvider,
     *,
     source_a_to_b: str = 'a→b',
     source_b_to_a: str = 'b→a',
-    event_filter: Optional[EventFilter] = None,
+    event_filter: EventFilter | None = None,
     anti_recursion: bool = True,
     forward_system_events: bool = False,
 ) -> tuple[EventForwardMiddleware, EventForwardMiddleware]:
@@ -244,9 +245,9 @@ def make_bidirectional_forward(
     """
 
     def _compose_filter(
-        base: Optional[EventFilter],
+        base: EventFilter | None,
         anti_source: str,
-    ) -> Optional[EventFilter]:
+    ) -> EventFilter | None:
         """将用户过滤与反递归过滤组合。"""
         if not anti_recursion:
 

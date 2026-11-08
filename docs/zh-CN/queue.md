@@ -79,17 +79,17 @@ class EventBus:
         self,
         event_registry: EventRegistry,
         handler_registry: EventHandlerRegistry,
-        queue: Optional[EventQueue] = None,   # 注入的队列抽象，缺省为 InMemoryEventQueue()
-        router: Optional[Router] = None,      # 注入的路由器，缺省为 Router(event_registry)
+        queue: EventQueue | None = None,      # 注入的队列抽象，缺省为 InMemoryEventQueue()
+        router: Router | None = None,         # 注入的路由器，缺省为 Router(event_registry)
         max_handler_semaphore: int = 256,
         shutdown: ShutdownConfig = ShutdownConfig(),
-        middleware_chain: Optional[MiddlewareChain] = None,
+        middleware_chain: MiddlewareChain | None = None,
     ) -> None
 ```
 
 | 参数 | 类型 | 默认值 | 说明 |
 | - | - | - | - |
-| `queue` | `Optional[EventQueue]` | `None` | 总线内部派发队列。不注入时使用默认进程内实现，容量取其自身默认配置。 |
+| `queue` | `EventQueue \| None` | `None` | 总线内部派发队列。不注入时使用默认进程内实现，容量取其自身默认配置。 |
 
 > **解耦要点**：队列容量等配置由队列自身（`InMemoryEventQueueConfig`）持有，
 > `EventBus` 不感知也不转发任何队列配置。

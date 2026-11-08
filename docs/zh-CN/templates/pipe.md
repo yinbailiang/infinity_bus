@@ -66,9 +66,9 @@ class Pipe(ABC):
 
 ```python
 class PipeAllocator(ABC):
-    async def allocate(self, **kwargs: Dict[str, Any]) -> str
+    async def allocate(self, **kwargs: dict[str, Any]) -> str
     async def release(self, pipe_id: str) -> None
-    async def get(self, pipe_id: str) -> Optional[Pipe]
+    async def get(self, pipe_id: str) -> Pipe | None
 ```
 
 | 方法 | 说明 |
@@ -96,7 +96,7 @@ class InProcessPipeAllocator(PipeAllocator):
 
 ```python
 class InProcessPipe(Pipe):
-    def __init__(self, maxsize: Optional[int] = None)
+    def __init__(self, maxsize: int | None = None)
 ```
 
 - `maxsize` 直接传递给内部的 `asyncio.Queue`，`None` 表示无限容量。
@@ -111,9 +111,9 @@ async def open_pipe(
     req_event: str,
     resp_event: str,
     handshake_timeout: float = 5.0,
-    session_id: Optional[str] = None,
-    allocator: Optional[InProcessPipeAllocator] = None,
-    pipe_kargs: Optional[Dict[str, Any]] = None,
+    session_id: str | None = None,
+    allocator: InProcessPipeAllocator | None = None,
+    pipe_kargs: dict[str, Any] | None = None,
 ) -> AsyncIterator[Pipe]
 ```
 
@@ -123,9 +123,9 @@ async def open_pipe(
 | `req_event` | `str` | 握手请求事件名。 |
 | `resp_event` | `str` | 握手响应事件名。 |
 | `handshake_timeout` | `float` | 握手超时时间（秒）。超时抛出 `PipeHandshakeError`。 |
-| `session_id` | `Optional[str]` | 用于关联请求-响应的会话 ID，若未提供则自动生成。 |
-| `allocator` | `Optional[InProcessPipeAllocator]` | 管道分配器实例。若未提供则使用模块级默认实例（`get_default_allocator()`）。 |
-| `pipe_kargs` | `Optional[Dict[str, Any]]` | 传递给管道构造函数的关键字参数字典（如 `{"maxsize": 10}`），会透传给 `allocator.allocate(**pipe_kargs)`。 |
+| `session_id` | `str \| None` | 用于关联请求-响应的会话 ID，若未提供则自动生成。 |
+| `allocator` | `InProcessPipeAllocator \| None` | 管道分配器实例。若未提供则使用模块级默认实例（`get_default_allocator()`）。 |
+| `pipe_kargs` | `dict[str, Any] \| None` | 传递给管道构造函数的关键字参数字典（如 `{"maxsize": 10}`），会透传给 `allocator.allocate(**pipe_kargs)`。 |
 
 **Yields**
 一个已握手成功并处于打开状态的 `Pipe` 实例。退出上下文时自动关闭管道并从分配器中释放。
@@ -143,9 +143,9 @@ async def expect_pipe(
     bus_proxy: EventBus.Proxy,
     req_event: str,
     resp_event: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     timeout: float = 5.0,
-    allocator: Optional[InProcessPipeAllocator] = None,
+    allocator: InProcessPipeAllocator | None = None,
 ) -> AsyncIterator[Pipe]
 ```
 
@@ -154,9 +154,9 @@ async def expect_pipe(
 | `bus_proxy` | `EventBus.Proxy` | 事件总线代理，用于监听请求和发送响应。 |
 | `req_event` | `str` | 期望监听的握手请求事件名。 |
 | `resp_event` | `str` | 用于回复握手结果的事件名。 |
-| `session_id` | `Optional[str]` | 用于筛选的会话 id，只响应指定会话 id 的请求。 |
+| `session_id` | `str \| None` | 用于筛选的会话 id，只响应指定会话 id 的请求。 |
 | `timeout` | `float` | 等待握手请求的超时时间（秒）。超时抛出 `PipeHandshakeError`。 |
-| `allocator` | `Optional[InProcessPipeAllocator]` | 管道分配器实例。若未提供则使用模块级默认实例（`get_default_allocator()`）。 |
+| `allocator` | `InProcessPipeAllocator \| None` | 管道分配器实例。若未提供则使用模块级默认实例（`get_default_allocator()`）。 |
 
 **Yields**
 握手成功后，返回从分配器中取出的 `Pipe` 实例。退出上下文时自动关闭管道。

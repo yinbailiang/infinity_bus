@@ -82,9 +82,9 @@ await source_bus.proxy("svc").publish("order.created", {...})
 class EventForwardMiddleware(Middleware):
     def __init__(
         self,
-        target: Union[EventBus, TargetBusProvider],
+        target: EventBus | TargetBusProvider,
         source_name: str = "event_forward",
-        event_filter: Optional[EventFilter] = None,
+        event_filter: EventFilter | None = None,
         forward_system_events: bool = False,
     ) -> None
 ```
@@ -93,7 +93,7 @@ class EventForwardMiddleware(Middleware):
 | - | - | - | - |
 | `target` | `EventBus \| TargetBusProvider` | (required) | Target bus or callback returning a target bus. |
 | `source_name` | `str` | `"event_forward"` | Source identifier used when publishing on the target bus. |
-| `event_filter` | `Optional[EventFilter]` | `None` | Event filter callback. `None` forwards all non-system events. |
+| `event_filter` | `EventFilter \| None` | `None` | Event filter callback. `None` forwards all non-system events. |
 | `forward_system_events` | `bool` | `False` | Whether to forward `infinity_bus.*` system events. |
 
 ## Usage Patterns
@@ -148,7 +148,7 @@ fw = EventForwardMiddleware(target=other_bus, event_filter=async_filter)
 ### `EventFilter`
 
 ```python
-EventFilter = Callable[[Event], Union[bool, Awaitable[bool]]]
+EventFilter = Callable[[Event], bool | Awaitable[bool]]
 ```
 
 Event filter callback signature: receives an `Event` object, returns `bool` synchronously
@@ -157,7 +157,7 @@ or asynchronously.
 ### `TargetBusProvider`
 
 ```python
-TargetBusProvider = Callable[[], Union[EventBus, Awaitable[EventBus]]]
+TargetBusProvider = Callable[[], EventBus | Awaitable[EventBus]]
 ```
 
 Target bus provider signature: returns an `EventBus` instance synchronously or

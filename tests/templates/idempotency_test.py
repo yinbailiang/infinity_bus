@@ -2,7 +2,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 from conftest import BusTestPayload, TestEventDecl
@@ -31,7 +31,7 @@ class IdemCount(IdempotentHandler):
         self._fail = fail
         self._tried = asyncio.Event()
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         self._tried.set()
         if self._fail:
             raise RuntimeError('boom')

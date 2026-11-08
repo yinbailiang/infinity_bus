@@ -1,7 +1,8 @@
 """EventQueue 抽象与 InMemoryEventQueue 实现的单元/集成测试。"""
 
 import asyncio
-from typing import Any, Callable, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 import pytest
 from conftest import CountingHandler, wait_for_condition

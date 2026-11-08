@@ -2,7 +2,8 @@
 
 import gc
 import weakref
-from typing import Any, Dict, Generator
+from collections.abc import Generator
+from typing import Any
 
 import pytest
 from conftest import BlockingHandler, CountingHandler, SimplePingHandler, wait_for_condition
@@ -609,7 +610,7 @@ class _RecordWeakSpy(Middleware):
         event_registry: EventRegistry,
         name: str,
         source: str,
-        data: Dict[str, Any] | BaseModel | None,
+        data: dict[str, Any] | BaseModel | None,
         old_event: Event | None,
         next: BeforePublishNext,
     ) -> None:

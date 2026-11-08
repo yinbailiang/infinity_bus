@@ -78,9 +78,9 @@ class Pipe(ABC):
 
 ```python
 class PipeAllocator(ABC):
-    async def allocate(self, **kwargs: Dict[str, Any]) -> str
+    async def allocate(self, **kwargs: dict[str, Any]) -> str
     async def release(self, pipe_id: str) -> None
-    async def get(self, pipe_id: str) -> Optional[Pipe]
+    async def get(self, pipe_id: str) -> Pipe | None
 ```
 
 | Method | Description |
@@ -112,7 +112,7 @@ In-process `Pipe` implementation based on `asyncio.Queue`.
 
 ```python
 class InProcessPipe(Pipe):
-    def __init__(self, maxsize: Optional[int] = None)
+    def __init__(self, maxsize: int | None = None)
 ```
 
 - `maxsize` is passed directly to the internal `asyncio.Queue`; `None` means unlimited.
@@ -128,9 +128,9 @@ async def open_pipe(
     req_event: str,
     resp_event: str,
     handshake_timeout: float = 5.0,
-    session_id: Optional[str] = None,
-    allocator: Optional[InProcessPipeAllocator] = None,
-    pipe_kargs: Optional[Dict[str, Any]] = None,
+    session_id: str | None = None,
+    allocator: InProcessPipeAllocator | None = None,
+    pipe_kargs: dict[str, Any] | None = None,
 ) -> AsyncIterator[Pipe]
 ```
 
@@ -140,9 +140,9 @@ async def open_pipe(
 | `req_event` | `str` | Handshake request event name. |
 | `resp_event` | `str` | Handshake response event name. |
 | `handshake_timeout` | `float` | Handshake timeout in seconds. Raises `PipeHandshakeError` on expiry. |
-| `session_id` | `Optional[str]` | Session ID for correlating request-response. Auto-generated if omitted. |
-| `allocator` | `Optional[InProcessPipeAllocator]` | Pipe allocator instance. Uses module-level default (`get_default_allocator()`) if omitted. |
-| `pipe_kargs` | `Optional[Dict[str, Any]]` | Keyword arguments forwarded to the pipe constructor (e.g., `{"maxsize": 10}`), passed as `allocator.allocate(**pipe_kargs)`. |
+| `session_id` | `str \| None` | Session ID for correlating request-response. Auto-generated if omitted. |
+| `allocator` | `InProcessPipeAllocator \| None` | Pipe allocator instance. Uses module-level default (`get_default_allocator()`) if omitted. |
+| `pipe_kargs` | `dict[str, Any] \| None` | Keyword arguments forwarded to the pipe constructor (e.g., `{"maxsize": 10}`), passed as `allocator.allocate(**pipe_kargs)`. |
 
 **Yields**: A successfully handshaked and opened `Pipe` instance. Auto-closes the pipe
 and releases it from the allocator on context exit.
@@ -160,9 +160,9 @@ async def expect_pipe(
     bus_proxy: EventBus.Proxy,
     req_event: str,
     resp_event: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     timeout: float = 5.0,
-    allocator: Optional[InProcessPipeAllocator] = None,
+    allocator: InProcessPipeAllocator | None = None,
 ) -> AsyncIterator[Pipe]
 ```
 
@@ -171,9 +171,9 @@ async def expect_pipe(
 | `bus_proxy` | `EventBus.Proxy` | Event bus proxy for listening for requests and sending responses. |
 | `req_event` | `str` | Expected handshake request event name. |
 | `resp_event` | `str` | Event name for replying with handshake results. |
-| `session_id` | `Optional[str]` | Session ID filter — only responds to requests with matching session ID. |
+| `session_id` | `str \| None` | Session ID filter — only responds to requests with matching session ID. |
 | `timeout` | `float` | Timeout in seconds for waiting on the handshake request. Raises `PipeHandshakeError` on expiry. |
-| `allocator` | `Optional[InProcessPipeAllocator]` | Pipe allocator instance. Uses module-level default (`get_default_allocator()`) if omitted. |
+| `allocator` | `InProcessPipeAllocator \| None` | Pipe allocator instance. Uses module-level default (`get_default_allocator()`) if omitted. |
 
 **Yields**: After a successful handshake, returns the `Pipe` instance retrieved from the
 allocator. Auto-closes the pipe on context exit.

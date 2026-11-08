@@ -25,16 +25,16 @@ decorator is more concise, type-safe, and suitable for most simple event handlin
 
 ```python
 def handler(
-    event_decl: Type[EventDeclaration],
+    event_decl: type[EventDeclaration],
     *,
-    handle_timeout: Optional[float] = 32.0,
-) -> Callable[[HandlerFunc], Type[GenericEventHandler]]
+    handle_timeout: float | None = 32.0,
+) -> Callable[[HandlerFunc], type[GenericEventHandler]]
 ```
 
 | Parameter | Type | Description |
 | - | - | - |
-| `event_decl` | `Type[EventDeclaration]` | Event declaration class with `name` and optional `payload_type` defined. |
-| `handle_timeout` | `Optional[float]` | Handler timeout in seconds. `None` means no timeout. Default `32.0`. |
+| `event_decl` | `type[EventDeclaration]` | Event declaration class with `name` and optional `payload_type` defined. |
+| `handle_timeout` | `float \| None` | Handler timeout in seconds. `None` means no timeout. Default `32.0`. |
 
 **Returns**: A decorator that accepts a plain function and returns an `EventHandler` subclass.
 

@@ -10,7 +10,7 @@
 
 ## 为什么需要它
 
-`Event.data` 注解为抽象 `Optional[BaseModel]`，Pydantic 2 会给抽象 BaseModel 字段装
+`Event.data` 注解为抽象 `BaseModel | None`，Pydantic 2 会给抽象 BaseModel 字段装
 **mock serializer / validator**：
 
 1. `Event.model_dump_json()`：真实负载被 dump 成空对象 `{}`；

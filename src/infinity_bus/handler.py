@@ -3,7 +3,7 @@ import logging
 import re
 import uuid
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
@@ -28,7 +28,7 @@ class Regex:
         """返回原始正则表达式字符串。"""
         return self._pattern
 
-    def fullmatch(self, string: str) -> Optional[re.Match[str]]:
+    def fullmatch(self, string: str) -> re.Match[str] | None:
         """委托给已编译正则的 ``fullmatch``。"""
         return self._compile.fullmatch(string)
 
@@ -52,12 +52,10 @@ class Regex:
 class EventHandler(ABC):
     """事件处理器基类，所有具体事件处理器应继承此类"""
 
-    def __init__(
-        self, subscriptions: Optional[List[Regex | str]] = None, handle_timeout: Optional[float] = 32.0
-    ) -> None:
+    def __init__(self, subscriptions: list[Regex | str] | None = None, handle_timeout: float | None = 32.0) -> None:
         self.subscriptions: Subscriptions = Subscriptions(subscriptions)
-        self.handle_timeout: Optional[float] = handle_timeout
-        self._handler_id: Optional[str] = None
+        self.handle_timeout: float | None = handle_timeout
+        self._handler_id: str | None = None
 
     async def __call__(self, bus: 'EventBus', event: Event) -> None:
         """事件处理器入口，自动组装代理并解包事件数据。
@@ -74,14 +72,14 @@ class EventHandler(ABC):
         await self.handle(event.data, bus_proxy, event)
 
     @abstractmethod
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None: ...
+    async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None: ...
 
     # ------------------------------------------------------------------
     # 生命周期钩子：处理器可感知自己的 id
     # ------------------------------------------------------------------
 
     @property
-    def handler_id(self) -> Optional[str]:
+    def handler_id(self) -> str | None:
         """注册后返回注册表分配的 id；未注册时为 ``None``。"""
         return self._handler_id
 
@@ -132,7 +130,7 @@ class EventHandlerRegistry:
     """事件处理器注册表，负责管理事件类型与处理器的映射关系。"""
 
     def __init__(self) -> None:
-        self._handlers: Dict[str, EventHandler] = {}
+        self._handlers: dict[str, EventHandler] = {}
         self._bus: 'EventBus | None' = None
         self._version: int = 0
 
@@ -301,7 +299,7 @@ class EventHandlerRegistry:
         self._version += 1
         return id
 
-    def get(self, handler_id: str) -> Optional[EventHandler]:
+    def get(self, handler_id: str) -> EventHandler | None:
         """根据ID获取事件处理器实例"""
         return self._handlers.get(handler_id)
 
@@ -316,7 +314,7 @@ class EventHandlerRegistry:
         - 钩子失败不阻断移除，但**返回首个失败异常**（其余记录日志），
           调用方据此感知清理不完整。
         """
-        handler: Optional[EventHandler] = self._handlers.pop(handler_id, None)
+        handler: EventHandler | None = self._handlers.pop(handler_id, None)
         if handler is None:
             return None
         first_error: Exception | None = None
@@ -341,6 +339,6 @@ class EventHandlerRegistry:
         return len(self._handlers)
 
     @property
-    def all_handlers(self) -> Dict[str, EventHandler]:
+    def all_handlers(self) -> dict[str, EventHandler]:
         """获取所有注册的事件处理器实例"""
         return self._handlers.copy()

@@ -1,8 +1,9 @@
 import asyncio
 import logging
 import types
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional, Set, Type, Union
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -83,7 +84,7 @@ class TaskErrorPayload(BaseModel):
     """处理器执行异常时携带的负载。"""
 
     error_event: Event = Field(description='发生异常的事件')
-    handler_id: Optional[str] = Field(default=None, description='发生异常的处理器内部ID')
+    handler_id: str | None = Field(default=None, description='发生异常的处理器内部ID')
     handler_name: str = Field(description='发生异常的处理器类名')
     error_type: str = Field(description='异常类型')
     error_message: str = Field(description='异常消息')
@@ -156,12 +157,12 @@ class EventBus:
     class Proxy:
         """事件总线代理，提供给处理器调用以访问总线功能"""
 
-        def __init__(self, bus: 'EventBus', source: str, raw_event: Optional[Event] = None) -> None:
+        def __init__(self, bus: 'EventBus', source: str, raw_event: Event | None = None) -> None:
             self._bus: EventBus = bus
             self._source: str = source
-            self._raw_event: Optional[Event] = raw_event
+            self._raw_event: Event | None = raw_event
 
-        async def publish(self, name: str, data: Optional[Union[Dict[str, Any], BaseModel]] = None) -> None:
+        async def publish(self, name: str, data: dict[str, Any] | BaseModel | None = None) -> None:
             """发布事件到总线，自动校验负载类型并触发中间件管道。"""
             await self._bus._publish(name, self._source, data, self._raw_event)
 
@@ -184,11 +185,11 @@ class EventBus:
         self,
         event_registry: EventRegistry,
         handler_registry: EventHandlerRegistry,
-        queue: Optional[EventQueue] = None,
-        router: Optional[Router] = None,
+        queue: EventQueue | None = None,
+        router: Router | None = None,
         max_handler_semaphore: int = 256,
         shutdown: ShutdownConfig = ShutdownConfig(),
-        middleware_chain: Optional[MiddlewareChain] = None,
+        middleware_chain: MiddlewareChain | None = None,
     ) -> None:
         self._events: EventRegistry = event_registry
         self._handlers: EventHandlerRegistry = handler_registry
@@ -204,12 +205,12 @@ class EventBus:
         self._enable_publish: asyncio.Event = asyncio.Event()
         self._running: asyncio.Event = asyncio.Event()
         self._queue: EventQueue = queue or InMemoryEventQueue()
-        self._dispatch_task: Optional[asyncio.Task[None]] = None
+        self._dispatch_task: asyncio.Task[None] | None = None
 
         self._handler_semaphore = asyncio.Semaphore(max_handler_semaphore)
-        self._active_tasks: Set[asyncio.Task[Any]] = set()
+        self._active_tasks: set[asyncio.Task[Any]] = set()
         # 尚未打开的启动闸门：事件已 get 但还有处理器任务没开始执行
-        self._pending_fences: Set[_DispatchFence] = set()
+        self._pending_fences: set[_DispatchFence] = set()
         # 分发循环串行执行：标记本次事件是否已进入 _core_dispatch（异常路径用）
         self._claimed_by_core: bool = False
 
@@ -219,8 +220,8 @@ class EventBus:
         self,
         name: str,
         source: str,
-        data: Optional[Union[Dict[str, Any], BaseModel]] = None,
-        old_event: Optional[Event] = None,
+        data: dict[str, Any] | BaseModel | None = None,
+        old_event: Event | None = None,
     ) -> None:
         """发布事件到总线（经过中间件链）"""
         if not self._enable_publish.is_set():
@@ -242,19 +243,19 @@ class EventBus:
         event_registry: EventRegistry,
         name: str,
         source: str,
-        data: Optional[Union[Dict[str, Any], BaseModel]],
-        old_event: Optional[Event],
+        data: dict[str, Any] | BaseModel | None,
+        old_event: Event | None,
     ) -> None:
         """before_publish 链的末端处理器：事件声明校验 → 负载校验 → 构造 Event → 入队 → 触发 on_publish 链
 
         此方法仅在所有中间件的 ``before_publish`` 钩子均调用 ``await next(...)`` 后执行。
         """
-        event_declaration: Optional[Type[EventDeclaration]] = event_registry.get(name)
+        event_declaration: type[EventDeclaration] | None = event_registry.get(name)
         if not event_declaration:
             logger.error(f'Unknown event type: {name}')
             raise ValueError(f'Unknown event type: {name}')
 
-        payload: Optional[BaseModel] = None
+        payload: BaseModel | None = None
         if event_declaration.payload_type:
             if data is None:
                 raise ValueError(f'Event {name} requires payload data, but none provided')
@@ -294,7 +295,7 @@ class EventBus:
         error: Exception,
         name: str,
         source: str,
-        data: Optional[Union[Dict[str, Any], BaseModel]],
+        data: dict[str, Any] | BaseModel | None,
     ) -> None:
         """on_publish_error 链的末端处理器（空操作）"""
 
@@ -436,8 +437,8 @@ class EventBus:
         return self
 
     async def __aexit__(
-        self, exc_type: Optional[type], exc_val: Optional[BaseException], exc_tb: Optional[types.TracebackType]
-    ) -> Optional[bool]:
+        self, exc_type: type | None, exc_val: BaseException | None, exc_tb: types.TracebackType | None
+    ) -> bool | None:
         """异步上下文管理器出口，确保总线资源被释放且不吞没异常"""
         try:
             await self.stop()
@@ -448,7 +449,7 @@ class EventBus:
                 raise
         return None  # 不抑制上下文体中的异常
 
-    def proxy(self, source: str, raw_event: Optional[Event] = None) -> Proxy:
+    def proxy(self, source: str, raw_event: Event | None = None) -> Proxy:
         """创建一个事件总线代理实例，供事件处理器调用"""
         return EventBus.Proxy(self, source, raw_event)
 
@@ -459,7 +460,7 @@ class EventBus:
         bus: 'EventBus',
         event: Event,
         dispatched_at: datetime,
-        fence: Optional[_DispatchFence] = None,
+        fence: _DispatchFence | None = None,
     ) -> None:
         """事件处理器包装器。
 
@@ -471,7 +472,7 @@ class EventBus:
         ``fence`` 是本次派发的启动闸门：获得信号量（真正开始执行）时到达，
         全部到达才 ack —— 与任务成败无关（见 :class:`_DispatchFence`）。
         """
-        record: Optional[TaskRecord] = None
+        record: TaskRecord | None = None
         try:
             async with self._handler_semaphore:  # 控制并发处理器数量，避免过载
                 if fence is not None:

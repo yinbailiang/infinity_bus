@@ -5,7 +5,7 @@ broker 不可达时模块自动 skip（避免 CI 因无 broker 失败）。
 """
 
 import asyncio
-from typing import Any, List, Literal, Optional
+from typing import Any, Literal
 
 import pytest
 from conftest import BusTestPayload, TestEventDecl
@@ -68,9 +68,9 @@ class PayloadSpy(EventHandler):
     def __init__(self, tag: str) -> None:
         super().__init__(['test.event'])
         self.tag = tag
-        self.received: List[BusTestPayload] = []
+        self.received: list[BusTestPayload] = []
 
-    async def handle(self, payload: Optional[Any], bus_proxy: Any, raw_event: Event) -> None:
+    async def handle(self, payload: Any | None, bus_proxy: Any, raw_event: Event) -> None:
         if isinstance(payload, BusTestPayload):
             self.received.append(payload)
 

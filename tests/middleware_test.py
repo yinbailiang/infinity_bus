@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pytest
 from conftest import SimplePingHandler
@@ -34,10 +34,10 @@ class LoggingMiddleware(Middleware):
     可通过 ``shared_log`` 将多个中间件的调用记录到同一个列表中，用于验证调用顺序。
     """
 
-    def __init__(self, name: str = 'log', shared_log: Optional[List[str]] = None) -> None:
+    def __init__(self, name: str = 'log', shared_log: list[str] | None = None) -> None:
         self.name = name
-        self.calls: List[str] = []  # 自身调用记录
-        self._shared: Optional[List[str]] = shared_log  # 共享记录（用于顺序验证）
+        self.calls: list[str] = []  # 自身调用记录
+        self._shared: list[str] | None = shared_log  # 共享记录（用于顺序验证）
         self.setup_called = False
         self.teardown_called = False
 
@@ -90,7 +90,7 @@ class ShortCircuitBeforeMiddleware(Middleware):
     """在 before_publish 中短路：不调用 next"""
 
     def __init__(self) -> None:
-        self.intercepted: List[str] = []
+        self.intercepted: list[str] = []
 
     async def on_setup(self, bus: EventBus) -> None:
         pass
@@ -154,7 +154,7 @@ class FailingSetupMiddleware(Middleware):
 class FailingBeforeMiddleware(Middleware):
     """before_publish 对特定事件抛出异常的中间件（默认: mw.ping）"""
 
-    def __init__(self, name: str = 'fail_before', fail_on: Optional[str] = 'mw.ping') -> None:
+    def __init__(self, name: str = 'fail_before', fail_on: str | None = 'mw.ping') -> None:
         self.name = name
         self.fail_on = fail_on
 
@@ -198,7 +198,7 @@ class MutatingMiddleware(Middleware):
     """在 before_publish 中修改 data 的中间件"""
 
     def __init__(self) -> None:
-        self.mutated: List[tuple[str, Any]] = []
+        self.mutated: list[tuple[str, Any]] = []
 
     async def on_setup(self, bus: EventBus) -> None:
         pass
@@ -267,7 +267,7 @@ class ErrorCapturingMiddleware(Middleware):
 
     def __init__(self, name: str = 'err_cap') -> None:
         self.name = name
-        self.errors: List[Dict[str, Any]] = []
+        self.errors: list[dict[str, Any]] = []
 
     async def on_setup(self, bus: EventBus) -> None:
         pass
@@ -500,7 +500,7 @@ class TestMiddlewareChainLifecycle:
     @pytest.mark.asyncio
     async def test_teardown_calls_on_teardown_reverse_order(self) -> None:
         """teardown 按注册逆序调用 on_teardown"""
-        shared_log: List[str] = []
+        shared_log: list[str] = []
         chain = MiddlewareChain()
         mw1 = LoggingMiddleware('mw1', shared_log=shared_log)
         mw2 = LoggingMiddleware('mw2', shared_log=shared_log)
@@ -561,7 +561,7 @@ class TestMiddlewareChainBuild:
     @pytest.mark.asyncio
     async def test_before_publish_chain_order(self) -> None:
         """责任链按中间件注册顺序包装 —— 外层先注册，内层后注册"""
-        shared_log: List[str] = []
+        shared_log: list[str] = []
         chain = MiddlewareChain()
         mw_outer = LoggingMiddleware('outer', shared_log=shared_log)
         mw_inner = LoggingMiddleware('inner', shared_log=shared_log)
@@ -598,7 +598,7 @@ class TestMiddlewareChainBuild:
     @pytest.mark.asyncio
     async def test_on_publish_chain_order(self) -> None:
         """on_publish 责任链顺序验证"""
-        shared_log: List[str] = []
+        shared_log: list[str] = []
         chain = MiddlewareChain()
         mw_outer = LoggingMiddleware('outer', shared_log=shared_log)
         mw_inner = LoggingMiddleware('inner', shared_log=shared_log)
@@ -759,7 +759,7 @@ class TestMiddlewareChainError:
 class _TaskNotifyRecorder(LoggingMiddleware):
     """记录任务通知的轻量中间件（链级单测用）。"""
 
-    def __init__(self, name: str, log: List[str]) -> None:
+    def __init__(self, name: str, log: list[str]) -> None:
         super().__init__(name)
         self._task_log = log
 
@@ -788,9 +788,9 @@ class TestMiddlewareChainTaskPipeline:
     async def test_build_dispatch_cache_and_invalidation(self) -> None:
         """build_dispatch 带缓存；中间件变更后自动重建（失效）。"""
         chain = MiddlewareChain()
-        calls: List[List[str]] = []
+        calls: list[list[str]] = []
 
-        async def final(event: Event, handler_ids: List[str]) -> None:
+        async def final(event: Event, handler_ids: list[str]) -> None:
             calls.append(list(handler_ids))
 
         built1 = chain.build_dispatch(final)
@@ -808,14 +808,14 @@ class TestMiddlewareChainTaskPipeline:
         """before_dispatch 不调用 next 即短路：final 不被调用。"""
 
         class _BlockMW(LoggingMiddleware):
-            async def before_dispatch(self, event: Event, handler_ids: List[str], next: DispatchNext) -> None:
+            async def before_dispatch(self, event: Event, handler_ids: list[str], next: DispatchNext) -> None:
                 return  # 阻断
 
         chain = MiddlewareChain()
         await chain.add(_BlockMW('block'))
         called = False
 
-        async def final(event: Event, handler_ids: List[str]) -> None:
+        async def final(event: Event, handler_ids: list[str]) -> None:
             nonlocal called
             called = True
 
@@ -834,7 +834,7 @@ class TestMiddlewareChainTaskPipeline:
                 raise RuntimeError('done boom')
 
         chain = MiddlewareChain()
-        log: List[str] = []
+        log: list[str] = []
         await chain.add(_BadNotify('bad'))
         await chain.add(_TaskNotifyRecorder('good', log))
 
@@ -1066,7 +1066,7 @@ class TestMiddlewareIntegration:
         handler_registry: EventHandlerRegistry,
     ) -> None:
         """多个中间件按注册顺序形成洋葱模型"""
-        shared_log: List[str] = []
+        shared_log: list[str] = []
         mw1 = LoggingMiddleware('mw1', shared_log=shared_log)
         mw2 = LoggingMiddleware('mw2', shared_log=shared_log)
         chain = MiddlewareChain()
@@ -1362,7 +1362,7 @@ class TestMiddlewareHotReload:
         handler_registry: EventHandlerRegistry,
     ) -> None:
         """热添加后责任链缓存失效并重建，新中间件参与洋葱模型"""
-        shared_log: List[str] = []
+        shared_log: list[str] = []
         mw_outer = LoggingMiddleware('outer', shared_log=shared_log)
         chain = MiddlewareChain()
         await chain.add(mw_outer)
@@ -1482,7 +1482,7 @@ class TestMiddlewareHotReload:
             middleware_chain=chain,
         )
         async with bus:
-            received_bus: List[EventBus] = []
+            received_bus: list[EventBus] = []
 
             class BusCapturingMiddleware(Middleware):
                 async def on_setup(self, bus: EventBus) -> None:
@@ -1537,7 +1537,7 @@ def _mock_bus() -> EventBus:
     return bus
 
 
-def _index_of(calls: List[str], target: str) -> int:
+def _index_of(calls: list[str], target: str) -> int:
     """在 calls 列表中查找 target 的索引，未找到返回 -1"""
     for i, c in enumerate(calls):
         if c == target:

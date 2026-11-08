@@ -8,20 +8,20 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, List, Optional, Type
+from typing import Any
 
 from pydantic import BaseModel
 
 from infinity_bus import Event, EventRegistry
 
-PayloadType = Type[BaseModel]
+PayloadType = type[BaseModel]
 """负载模型类别名：``EventDeclaration.payload_type`` 的类型。"""
 
 
 class EventCodec:
     """「完美 Event」的线格式编解码器：``encode`` / ``decode`` 往返不丢类型语义。
 
-    背景：``Event.data`` 注解为抽象 ``Optional[BaseModel]``，Pydantic 2 会给抽象
+    背景：``Event.data`` 注解为抽象 ``BaseModel | None``，Pydantic 2 会给抽象
     BaseModel 字段装 mock serializer/validator —— ``model_dump_json`` 会把真实负载
     dump 成空对象 ``{}``；``model_validate_json`` 则解出不可用 mock 实例。因此本
     编解码器采用自定义信封：
@@ -35,14 +35,14 @@ class EventCodec:
     前 ``decode`` —— 队列两侧始终是完美 Event（见 ``EventQueue`` 抽象契约）。
     """
 
-    def __init__(self, registry: Optional[EventRegistry] = None) -> None:
+    def __init__(self, registry: EventRegistry | None = None) -> None:
         """构造编解码器。
 
         registry:
             事件注册表（可选）。提供时按 ``payload_type`` 重建负载；为 ``None`` 时
             解码负载保持原始 JSON 值（适用于无负载事件或纯透传场景）。
         """
-        self._registry: Optional[EventRegistry] = registry
+        self._registry: EventRegistry | None = registry
 
     def encode(self, event: Event) -> bytes:
         """把 Event 编码为线格式 bytes（自定义信封，UTF-8 JSON）。
@@ -75,9 +75,9 @@ class EventCodec:
         return self._rebuild_data(event)
 
     @staticmethod
-    def _decode_timestamps(values: List[Any]) -> List[datetime]:
+    def _decode_timestamps(values: list[Any]) -> list[datetime]:
         """把线格式中的 ISO 时间字符串还原为 datetime（无法解析的条目跳过）。"""
-        decoded: List[datetime] = []
+        decoded: list[datetime] = []
         for value in values or []:
             if isinstance(value, datetime):
                 decoded.append(value)
@@ -99,7 +99,7 @@ class EventCodec:
             return event
         return event.model_copy(update={'data': payload_type.model_validate(event.data)})
 
-    def _payload_type(self, name: str) -> Optional[PayloadType]:
+    def _payload_type(self, name: str) -> PayloadType | None:
         """注册表中事件声明的负载模型类；无 registry 或未注册时返回 None。"""
         if self._registry is None:
             return None

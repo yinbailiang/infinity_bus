@@ -5,7 +5,8 @@ ServiceError 转换、单向事件、忽略规则、端到端集成（含 RPC �
 """
 
 import asyncio
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import pytest
 from pydantic import BaseModel, Field

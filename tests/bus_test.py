@@ -2,7 +2,8 @@
 
 import asyncio
 import time
-from typing import Any, Awaitable, Callable, List, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import pytest
 from conftest import (
@@ -177,7 +178,7 @@ async def test_error_isolation_and_propagation(event_bus: EventBus, handler_regi
     await handler_registry.register(counter)
     await handler_registry.register(spy)
 
-    tasks: List[Awaitable[Any]] = await publish_many(
+    tasks: list[Awaitable[Any]] = await publish_many(
         event_bus,
         'test.event',
         [{'value': 1}, {'value': -1}, {'value': 2}],
@@ -230,20 +231,20 @@ async def test_multi_handler_same_event(
     handler_registry: EventHandlerRegistry,
 ) -> None:
     """同一事件可被多个 Handler 处理"""
-    results: List[str] = []
+    results: list[str] = []
 
     class HandlerA(EventHandler):
         def __init__(self):
             super().__init__(['test.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             results.append('A')
 
     class HandlerB(EventHandler):
         def __init__(self):
             super().__init__(['test.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: 'EventBus.Proxy', raw_event: Event) -> None:
             results.append('B')
 
     await handler_registry.register(HandlerA())
@@ -436,7 +437,7 @@ class _StartBoomHandler(EventHandler):
         super().__init__(['test.event'])
         self.activated = 0
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         pass
 
     async def on_activate(self, bus: EventBus) -> None:
@@ -511,7 +512,7 @@ async def test_start_orders_middleware_setup_before_handler_activation(
 ) -> None:
     """启动顺序：先初始化中间件、再激活处理器；停机顺序与之互为镜像——
     处理器在激活阶段发布的消息因此经过完整可用的中间件管道。"""
-    order: List[str] = []
+    order: list[str] = []
 
     class _OrderMiddleware(Middleware):
         async def before_publish(
@@ -546,7 +547,7 @@ async def test_start_orders_middleware_setup_before_handler_activation(
             await super().on_deactivate(bus)
             order.append('handler.on_deactivate')
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
             pass
 
     chain = MiddlewareChain()
@@ -567,7 +568,7 @@ async def test_start_rolls_back_middleware_when_handler_activation_fails(
     event_bus_factory: Callable[..., EventBus],
 ) -> None:
     """中间件 setup 成功但处理器激活失败 → 中间件被整体回滚（on_teardown）且链解绑，可重试"""
-    teardowns: List[str] = []
+    teardowns: list[str] = []
 
     class _TeardownSpyMiddleware(Middleware):
         async def before_publish(
@@ -621,17 +622,17 @@ async def test_start_rolls_back_middleware_when_handler_activation_fails(
 class _TaskPipelineSpy(Middleware):
     """任务管道钩子的可配置探针中间件（记录调用 + 可注错 / 阻断 / 过滤）。"""
 
-    def __init__(self, order: Optional[List[str]] = None) -> None:
-        self._bus: Optional[EventBus] = None
-        self._order: Optional[List[str]] = order
-        self.bus_at_dispatch: List[int] = []  # before_dispatch 进入时的 active_task_count
-        self.active_after_next: List[int] = []  # next 返回后的 active_task_count
-        self.dispatch_calls: List[tuple[str, List[str]]] = []
-        self.starts: List[TaskRecord] = []
-        self.dones: List[TaskRecord] = []
+    def __init__(self, order: list[str] | None = None) -> None:
+        self._bus: EventBus | None = None
+        self._order: list[str] | None = order
+        self.bus_at_dispatch: list[int] = []  # before_dispatch 进入时的 active_task_count
+        self.active_after_next: list[int] = []  # next 返回后的 active_task_count
+        self.dispatch_calls: list[tuple[str, list[str]]] = []
+        self.starts: list[TaskRecord] = []
+        self.dones: list[TaskRecord] = []
         self.block_for: set[str] = set()  # 阻断这些事件的派发（不调用 next）
         self.raise_for: set[str] = set()  # 在这些事件上抛异常（短路 + 记录）
-        self.filter_keep: Optional[str] = None  # 仅保留该处理器类名对应的 id
+        self.filter_keep: str | None = None  # 仅保留该处理器类名对应的 id
         self.raise_on_start = False
         self.raise_on_done = False
 
@@ -652,7 +653,7 @@ class _TaskPipelineSpy(Middleware):
     async def on_publish(self, event: Event, next: OnPublishNext) -> None:
         await next(event)
 
-    async def before_dispatch(self, event: Event, handler_ids: List[str], next: DispatchNext) -> None:
+    async def before_dispatch(self, event: Event, handler_ids: list[str], next: DispatchNext) -> None:
         self.dispatch_calls.append((event.name, list(handler_ids)))
         if self._bus is not None:
             self.bus_at_dispatch.append(self._bus.active_task_count)
@@ -693,7 +694,7 @@ class _TaskPipelineSpy(Middleware):
 class _DispatchOrderSpy(Middleware):
     """记录 before_dispatch 洋葱顺序（共享 log）。"""
 
-    def __init__(self, name: str, log: List[str]) -> None:
+    def __init__(self, name: str, log: list[str]) -> None:
         self.name = name
         self._log = log
 
@@ -711,7 +712,7 @@ class _DispatchOrderSpy(Middleware):
     async def on_publish(self, event: Event, next: OnPublishNext) -> None:
         await next(event)
 
-    async def before_dispatch(self, event: Event, handler_ids: List[str], next: DispatchNext) -> None:
+    async def before_dispatch(self, event: Event, handler_ids: list[str], next: DispatchNext) -> None:
         self._log.append(f'{self.name}:in:{event.name}')
         await next(event, handler_ids)
         self._log.append(f'{self.name}:out:{event.name}')
@@ -720,7 +721,7 @@ class _DispatchOrderSpy(Middleware):
 @pytest.mark.asyncio
 async def test_task_pipeline_micro_timing_order(event_bus_factory: Callable[..., EventBus]) -> None:
     """微时序：dispatch in → （核心创建任务）→ dispatch out → start（信号量后）→ handle → done。"""
-    order: List[str] = []
+    order: list[str] = []
     spy = _TaskPipelineSpy(order=order)
     chain = MiddlewareChain()
     await chain.add(spy)
@@ -729,7 +730,7 @@ async def test_task_pipeline_micro_timing_order(event_bus_factory: Callable[...,
         def __init__(self) -> None:
             super().__init__(['mw.ping'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
             order.append('handle')
 
     hreg = EventHandlerRegistry()
@@ -770,7 +771,7 @@ async def test_before_dispatch_fires_for_unmatched_event(event_bus: EventBus) ->
 @pytest.mark.asyncio
 async def test_before_dispatch_onion_order(event_bus_factory: Callable[..., EventBus]) -> None:
     """洋葱模型：外层先入后出；handler 执行严格在所有 dispatch 钩子退出之后。"""
-    order: List[str] = []
+    order: list[str] = []
     chain = MiddlewareChain()
     await chain.add(_DispatchOrderSpy('a', order))
     await chain.add(_DispatchOrderSpy('b', order))
@@ -779,7 +780,7 @@ async def test_before_dispatch_onion_order(event_bus_factory: Callable[..., Even
         def __init__(self) -> None:
             super().__init__(['mw.ping'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
             order.append('handle')
 
     hreg = EventHandlerRegistry()
@@ -806,20 +807,20 @@ async def test_before_dispatch_can_filter_handlers(event_bus_factory: Callable[.
     chain = MiddlewareChain()
     await chain.add(spy)
 
-    received: List[str] = []
+    received: list[str] = []
 
     class HandlerX(EventHandler):
         def __init__(self) -> None:
             super().__init__(['test.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
             received.append('X')
 
     class HandlerY(EventHandler):
         def __init__(self) -> None:
             super().__init__(['test.event'])
 
-        async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+        async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
             received.append('Y')
 
     hreg = EventHandlerRegistry()
@@ -1078,15 +1079,15 @@ async def test_task_pipeline_hot_add_remove(event_bus: EventBus, handler_registr
 class _LifecycleSpyMiddleware(Middleware):
     """记录启停各阶段总线状态快照的中间件（微时序锁定用）。"""
 
-    def __init__(self, order: Optional[List[str]] = None) -> None:
-        self._bus: Optional[EventBus] = None
+    def __init__(self, order: list[str] | None = None) -> None:
+        self._bus: EventBus | None = None
         self._order = order
         self.setup_calls = 0
         self.teardown_calls = 0
         self.shutdown_publish_count = 0
         self.snapshots: dict[str, tuple[bool, bool, int]] = {}  # phase -> (running, publish, active_tasks)
-        self.teardown_dispatch_task_done: Optional[bool] = None
-        self.teardown_publish_error: Optional[str] = None
+        self.teardown_dispatch_task_done: bool | None = None
+        self.teardown_publish_error: str | None = None
 
     async def on_setup(self, bus: EventBus) -> None:
         self._bus = bus
@@ -1134,17 +1135,17 @@ class _LifecycleSpyMiddleware(Middleware):
 class _LifecycleSpyHandler(EventHandler):
     """记录激活/下线阶段状态与处理计数的处理器（微时序锁定用）。"""
 
-    def __init__(self, order: Optional[List[str]] = None) -> None:
+    def __init__(self, order: list[str] | None = None) -> None:
         super().__init__(['test.event'])
         self._order = order
         self.handled = 0
         self.activate_calls = 0
         self.deactivate_calls = 0
-        self.activate_snapshot: Optional[tuple[bool, bool, bool]] = None  # running, publish, dispatch_created
-        self.deactivate_snapshot: Optional[tuple[bool, bool, int, int]] = None  # running, publish, active, queue
-        self.deactivate_publish_error: Optional[str] = None
+        self.activate_snapshot: tuple[bool, bool, bool] | None = None  # running, publish, dispatch_created
+        self.deactivate_snapshot: tuple[bool, bool, int, int] | None = None  # running, publish, active, queue
+        self.deactivate_publish_error: str | None = None
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         self.handled += 1
 
     async def on_activate(self, bus: EventBus) -> None:
@@ -1175,7 +1176,7 @@ class _LifecycleSpyHandler(EventHandler):
 async def test_start_stop_micro_timing_phase_locks(event_bus_factory: Callable[..., EventBus]) -> None:
     """启停微时序：setup/激活时双闸关且调度未建；__shutdown__ 发布时双闸仍开；
     排空完成先于下线；running 清零先于下线/拆中间件；拆中间件时调度已终结。"""
-    order: List[str] = []
+    order: list[str] = []
     mw = _LifecycleSpyMiddleware(order=order)
     chain = MiddlewareChain()
     await chain.add(mw)
@@ -1318,7 +1319,7 @@ class _FailingDeactivateHandler(EventHandler):
     def __init__(self) -> None:
         super().__init__(['test.event'])
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         pass
 
     async def on_deactivate(self, bus: EventBus) -> None:
@@ -1427,19 +1428,19 @@ class _AckRecordingQueue(EventQueue):
 
     def __init__(self) -> None:
         self._inner = InMemoryEventQueue()
-        self.published: List[Event] = []
-        self.acked: List[Event] = []
-        self.abandoned: List[Event] = []
+        self.published: list[Event] = []
+        self.acked: list[Event] = []
+        self.abandoned: list[Event] = []
 
     @property
     def unfinished(self) -> int:
         return int(self._inner._queue._unfinished_tasks)  # type: ignore[attr-defined]
 
-    def acked_ids(self, name: str) -> List[str]:
+    def acked_ids(self, name: str) -> list[str]:
         """某个事件名下已 ack 的事件 id（顺序即 ack 顺序）。"""
         return [event.id for event in self.acked if event.name == name]
 
-    def abandoned_ids(self, name: str) -> List[str]:
+    def abandoned_ids(self, name: str) -> list[str]:
         """某个事件名下「未完整派发、停止等待」的事件 id。"""
         return [event.id for event in self.abandoned if event.name == name]
 
@@ -1472,7 +1473,7 @@ class _SleepingHandler(BaseTestHandler):
         super().__init__([event_name], handle_timeout=5.0)
         self.delay = delay
 
-    async def _do_handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def _do_handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         await asyncio.sleep(self.delay)
 
 
@@ -1483,7 +1484,7 @@ class _GatedHandler(BaseTestHandler):
         super().__init__(['test.slow'], handle_timeout=5.0)
         self.gate = gate
 
-    async def _do_handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def _do_handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         await self.gate.wait()
 
 
@@ -1493,7 +1494,7 @@ class _FailingHandler(BaseTestHandler):
     def __init__(self) -> None:
         super().__init__(['test.slow'], handle_timeout=5.0)
 
-    async def _do_handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def _do_handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         raise RuntimeError('handler boom')
 
 
@@ -1524,7 +1525,7 @@ class _ClaimingMiddleware(Middleware):
 
     def __init__(self) -> None:
         self.claimed: set[str] = set()
-        self.abandoned: List[str] = []
+        self.abandoned: list[str] = []
 
     async def before_publish(
         self,
@@ -1811,7 +1812,7 @@ async def test_dispatch_fence_opens_once() -> None:
     from infinity_bus.bus import _DispatchFence
 
     event = Event(name='fence.test')
-    opened: List[Event] = []
+    opened: list[Event] = []
     fence = _DispatchFence(event, 2, lambda f: opened.append(f.event))
 
     fence.arrive()

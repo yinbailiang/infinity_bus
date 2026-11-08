@@ -1,16 +1,9 @@
 import asyncio
 import logging
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from inspect import isawaitable
-from typing import (
-    Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    List,
-    Optional,
-    Union,
-)
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -30,24 +23,24 @@ class OneShotEventHandler(EventHandler):
 
     def __init__(
         self,
-        event_patterns: List[Union[str, Regex]],
+        event_patterns: list[str | Regex],
         on_match: Callable[[Event], Any],
-        filter_func: Optional[Callable[[Event], Union[Awaitable[bool], bool]]] = None,
-        on_error: Optional[Callable[[Exception], Any]] = None,
-        handle_timeout: Optional[float] = None,
+        filter_func: Callable[[Event], Awaitable[bool] | bool] | None = None,
+        on_error: Callable[[Exception], Any] | None = None,
+        handle_timeout: float | None = None,
     ) -> None:
         # 若需要监听关闭事件，自动添加内置事件名
         super().__init__(subscriptions=event_patterns.copy(), handle_timeout=handle_timeout)
 
         self._on_match: Callable[[Event], Any] = on_match
-        self._filter: Optional[Callable[[Event], Union[Awaitable[bool], bool]]] = filter_func
-        self._on_error: Optional[Callable[[Exception], Any]] = on_error
+        self._filter: Callable[[Event], Awaitable[bool] | bool] | None = filter_func
+        self._on_error: Callable[[Exception], Any] | None = on_error
 
         # 用于逻辑停用：即使处理器尚未从注册表移除，也阻止其继续执行回调
         self._active = asyncio.Event()
         self._active.set()
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: EventBus.Proxy, raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: EventBus.Proxy, raw_event: Event) -> None:
         """事件入口，内部进行状态检查与过滤"""
         if not self._active.is_set():
             logger.debug('OneShotEventHandler 已停用，跳过事件: %s (id=%s)', raw_event.name, raw_event.id)
@@ -58,7 +51,7 @@ class OneShotEventHandler(EventHandler):
         # 过滤
         if self._filter is not None:
             try:
-                result: Union[Awaitable[bool], bool] = self._filter(raw_event)
+                result: Awaitable[bool] | bool = self._filter(raw_event)
                 if isawaitable(result):
                     result = await result
                 if not result:
@@ -95,14 +88,14 @@ async def temporary_handler(
 @asynccontextmanager
 async def expect(
     bus_proxy: EventBus.Proxy,
-    event_patterns: Union[str, Regex, List[Union[str, Regex]]],
-    filter_func: Optional[Callable[[Event], Union[Awaitable[bool], bool]]] = None,
+    event_patterns: str | Regex | list[str | Regex],
+    filter_func: Callable[[Event], Awaitable[bool] | bool] | None = None,
 ) -> AsyncGenerator[asyncio.Future[Event], None]:
     """异步上下文管理器：注册一个一次性事件监听器，返回一个 Future 用于等待匹配的事件。"""
     if isinstance(event_patterns, (str, Regex)):
-        patterns: List[Union[str, Regex]] = [event_patterns]
+        patterns: list[str | Regex] = [event_patterns]
     else:
-        patterns: List[Union[str, Regex]] = list(event_patterns)
+        patterns: list[str | Regex] = list(event_patterns)
     future: asyncio.Future[Event] = asyncio.Future()
 
     def on_error(exc: BaseException) -> None:

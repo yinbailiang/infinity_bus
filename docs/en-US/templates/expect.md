@@ -27,16 +27,16 @@ manages the listener lifecycle via an async context manager, making it ideal for
 @asynccontextmanager
 async def expect(
     bus_proxy: EventBus.Proxy,
-    event_patterns: Union[str, Regex, List[Union[str, Regex]]],
-    filter_func: Optional[Callable[[Event], Union[Awaitable[bool], bool]]] = None,
+    event_patterns: str | Regex | list[str | Regex],
+    filter_func: Callable[[Event], Awaitable[bool] | bool] | None = None,
 ) -> AsyncGenerator[asyncio.Future[Event], None]
 ```
 
 | Parameter | Type | Description |
 | - | - | - |
 | `bus_proxy` | `EventBus.Proxy` | Event bus proxy for accessing the handler registry. |
-| `event_patterns` | `str` \| `Regex` \| `List[str \| Regex]` | Event name patterns to listen for. `str` for exact match, `Regex` for pattern match. Accepts a single value or a sequence. |
-| `filter_func` | `Optional[Callable]` | Optional filter. Receives an `Event` object and returns a boolean (or awaitable boolean). `True` means the event matches. If omitted, any event matching `event_patterns` will trigger. |
+| `event_patterns` | `str` \| `Regex` \| `list[str \| Regex]` | Event name patterns to listen for. `str` for exact match, `Regex` for pattern match. Accepts a single value or a sequence. |
+| `filter_func` | `Callable \| None` | Optional filter. Receives an `Event` object and returns a boolean (or awaitable boolean). `True` means the event matches. If omitted, any event matching `event_patterns` will trigger. |
 
 **Yields**: an `asyncio.Future[Event]` — `await` it to get the matching `Event` instance.
 

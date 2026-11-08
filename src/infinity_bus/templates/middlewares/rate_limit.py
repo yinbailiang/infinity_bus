@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 from collections import defaultdict, deque
-from typing import Any, Dict
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -48,7 +48,7 @@ class RateLimitMiddleware(Middleware):
         self._per_event = per_event
 
         # name → deque[float]
-        self._buckets: Dict[str, deque[float]] = defaultdict(deque)
+        self._buckets: dict[str, deque[float]] = defaultdict(deque)
         self._lock = asyncio.Lock()
 
     async def on_setup(self, bus: EventBus) -> None:
@@ -64,7 +64,7 @@ class RateLimitMiddleware(Middleware):
         event_registry: EventRegistry,
         name: str,
         source: str,
-        data: Dict[str, Any] | BaseModel | None,
+        data: dict[str, Any] | BaseModel | None,
         old_event: Event | None,
         next: BeforePublishNext,
     ) -> None:
@@ -101,7 +101,7 @@ class RateLimitMiddleware(Middleware):
         await next(event)
 
     @property
-    def current_rate(self) -> Dict[str, int]:
+    def current_rate(self) -> dict[str, int]:
         """返回当前各窗口的请求计数快照。"""
         now = time.monotonic()
         cutoff = now - self._window

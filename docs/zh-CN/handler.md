@@ -15,8 +15,8 @@
 class EventHandler(ABC):
     def __init__(
         self,
-        subscriptions: Optional[List[Regex | str]] = None,
-        handle_timeout: Optional[float] = 32.0
+        subscriptions: list[Regex | str] | None = None,
+        handle_timeout: float | None = 32.0
     ) -> None
 
     async def __call__(self, bus: EventBus, event: Event) -> None
@@ -24,13 +24,13 @@ class EventHandler(ABC):
     @abstractmethod
     async def handle(
         self,
-        payload: Optional[BaseModel],
+        payload: BaseModel | None,
         bus_proxy: EventBus.Proxy,
         raw_event: Event
     ) -> None: ...
 
     @property
-    def handler_id(self) -> Optional[str]: ...
+    def handler_id(self) -> str | None: ...
 
     async def on_registered(self, handler_id: str) -> None: ...
     async def on_unregistered(self) -> None: ...
@@ -70,7 +70,7 @@ class MyHandler(EventHandler):
 ```python
 async def handle(
     self,
-    payload: Optional[BaseModel],      # 已类型化的负载（事件无负载时为 None）
+    payload: BaseModel | None,         # 已类型化的负载（事件无负载时为 None）
     bus_proxy: EventBus.Proxy,          # 用于发布后续事件的代理
     raw_event: Event                    # 完整事件元数据（id、sources、timestamps）
 ) -> None:
@@ -129,7 +129,7 @@ class EventHandlerRegistry:
     async def unregister(self, handler_id: str) -> Exception | None
     async def activate(self, bus: EventBus) -> None
     async def deactivate(self, strict: bool = False) -> list[tuple[str, Exception]]
-    def get(self, handler_id: str) -> Optional[EventHandler]
+    def get(self, handler_id: str) -> EventHandler | None
     async def clear(self) -> list[tuple[str, Exception]]
     def __len__(self) -> int
     def __contains__(self, handler_id: str) -> bool
@@ -140,7 +140,7 @@ class EventHandlerRegistry:
     @property
     def handlers_count(self) -> int
     @property
-    def all_handlers(self) -> Dict[str, EventHandler]
+    def all_handlers(self) -> dict[str, EventHandler]
 ```
 
 | 方法 / 属性 | 说明 |
@@ -156,7 +156,7 @@ class EventHandlerRegistry:
 | `__iter__()` | 支持 `for hid, h in registry` 迭代。 |
 | `version` | 注册表版本号，每次变更（增/删/清空）递增，供 [Router](router.md) 感知变化。 |
 | `handlers_count` | 当前注册的处理器总数。 |
-| `all_handlers` | 返回所有注册处理器的副本 `Dict[str, EventHandler]`。 |
+| `all_handlers` | 返回所有注册处理器的副本 `dict[str, EventHandler]`。 |
 
 > **注册表-总线绑定**：`EventBus.start()` 内部会 `await registry.activate(bus)`，`stop()` 会 `await registry.deactivate()`。
 > 因此「注册（有 id）」与「在总线上激活（可收事件）」是两层生命周期：同一注册表不可同时被两个总线共用。

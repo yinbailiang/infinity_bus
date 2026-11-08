@@ -1,7 +1,7 @@
 """事件转发中间件测试：EventForwardMiddleware。"""
 
 import asyncio
-from typing import Any, List, Optional
+from typing import Any
 
 import pytest
 from conftest import (
@@ -38,14 +38,14 @@ from infinity_bus.templates import (
 class ForwardSpyHandler(EventHandler):
     """记录所有接收到的事件名和来源，用于验证转发结果。"""
 
-    def __init__(self, subscriptions: List[str | Regex]) -> None:
+    def __init__(self, subscriptions: list[str | Regex]) -> None:
         super().__init__(subscriptions)
-        self.received_names: List[str] = []
-        self.received_sources: List[str] = []
-        self.received_payloads: List[Optional[BaseModel]] = []
+        self.received_names: list[str] = []
+        self.received_sources: list[str] = []
+        self.received_payloads: list[BaseModel | None] = []
         self._event = asyncio.Event()
 
-    async def handle(self, payload: Optional[BaseModel], bus_proxy: Any, raw_event: Event) -> None:
+    async def handle(self, payload: BaseModel | None, bus_proxy: Any, raw_event: Event) -> None:
         self.received_names.append(raw_event.name)
         self.received_sources.append(raw_event.sources[-1] if raw_event.sources else '')
         self.received_payloads.append(payload)
@@ -902,7 +902,7 @@ class TestMakeBidirectionalForward:
         )
 
         # bus_a 尚未创建，使用工厂回调
-        _bus_a: Optional[EventBus] = None
+        _bus_a: EventBus | None = None
 
         def get_bus_a() -> EventBus:
             assert _bus_a is not None
