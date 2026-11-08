@@ -1,11 +1,12 @@
 # Commit Log — `infinity_bus`
 
-> 共 **160** 个提交 · 28 个版本标签 · 2026-06-07 ~ 2026-11-06
+> 共 **172** 个提交 · 29 个版本标签 · 2026-06-07 ~ 2026-11-09
 
 ## 版本标签
 
 | Tag | Commit |
 | --- | ------ |
+| `v7.0.0` | `8ee216a` |
 | `v6.2.0` | `e6238fb` |
 | `v6.1.0` | `3d15097` |
 | `v6.0.0` | `0e297c6` |
@@ -39,7 +40,47 @@
 
 ## 全部提交
 
+### 2026-11-09
+
+- **`8ee216a`** `chore: bump version to 7.0.0`
+  - Version bumped 6.2.0 -> 7.0.0 (major: unified audit logging replaces `JSONLLoggingMiddleware` / `SQLiteLoggingMiddleware`; stable payload digests; `flush()` reports unfinished records)
+
+- **`0ac179c`** `style: normalize type annotations to PEP 585/604`
+  - Built-in generics and PEP 604 unions across `src` / `tests`; `collections.abc` imports; zh-CN / en-US docs synced; ruff `UP006` / `UP007` / `UP035` / `UP045` enabled
+
+- **`23c062f`** `Merge PR #6: feat(templates)!: unify audit logging with pluggable sinks`
+  - `AuditMiddleware` + `AuditWriter` + `AuditRecordRenderer` + pluggable `AuditSink` (`JSONLSink` / `SQLiteSink`); background batching, backoff reconnect, retention / vacuum, digest / full payload modes, publish-error rows; removes `JSONLLoggingMiddleware`, `SQLiteLoggingMiddleware`, `serialize_data`
+
+- **`5458130`** `fix(templates): stabilize audit digests and flush reporting`
+  - Unrenderable payload values use `<0>`, `<1>`, ... placeholders with a `payload_unrenderable` side channel; digest is computed from the placeholder JSON; `payload_max_bytes` covers the side channel; `flush()` returns the unfinished record count
+
+- **`7c625e8`** `fix(templates): harden audit lifecycle and JSONL reclamation`
+  - Queue cleanup after shutdown timeout, retry backoff preservation, event snapshots, render-failure counting, reserved `id` column rejection, maintenance toggle, JSONL rotation / `backup_count`
+
+- **`335536f`** `refactor(templates)!: split audit writer, renderer, and configs`
+  - `AuditWriter` facade, `AuditRecordRenderer`, `AuditWriterConfig` / `AuditPayloadConfig`, audit state machine, `audit/sinks` package layout
+
+### 2026-11-08
+
+- **`83d79fc`** `feat(templates)!: unify audit logging with pluggable sinks`
+  - Initial unified audit implementation: `AuditSink` abstraction, `JSONLSink` / `SQLiteSink`, batching, backoff reconnect, retention and digest payload mode
+
+- **`18ea985`** `fix(templates): decouple audit retention from write path`
+  - `maintenance_interval` task, `AuditSink.reclaim`, serialized sink calls, idle maintenance and prune-interval bypass coverage
+
+- **`36ce6de`** `fix(templates): let audit maintenance reopen closed sink`
+  - Periodic maintenance reopens a sink closed by write failure before pruning; regression test and docs synced
+
+- **`bf2f9d3`** `style(tests): format metrics middleware test`
+  - Formatting-only cleanup of the metrics middleware test
+
+- **`f99189d`** `chore(agent-kit): sync templates and require kit 1.1.0`
+  - Agent-kit templates synchronized; dev dependency requires kit 1.1.0
+
 ### 2026-11-06
+
+- **`e4dab35`** `docs: record v6.2.0 tag in COMMIT_LOG`
+  - Release baseline record for v6.2.0
 
 - **`e6238fb`** `chore: bump version to 6.2.0`
   - Version bumped 6.1.0 -> 6.2.0 (minor: new middleware hook + recorder protocol methods)
