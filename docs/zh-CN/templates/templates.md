@@ -73,9 +73,9 @@ from infinity_bus.templates import (
     'handler',
     # expect
     'expect', 'OneShotEventHandler', 'temporary_handler',
-    # pipe
-    'Pipe', 'InProcessPipe', 'InProcessPipeAllocator', 'PipeAllocator',
-    'open_pipe', 'expect_pipe', 'get_default_allocator',
+    # pipe（摊平 pipe.__all__，含 allocator 子包）
+    'allocator',
+    'Pipe', 'open_pipe', 'expect_pipe',
     'PipeHandshakeError', 'PipeClosedError', 'PipeTeardownError',
     'PipeLinkedResponse', 'PipeOpenRequest',
     # register

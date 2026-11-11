@@ -56,17 +56,14 @@ from .middlewares import (
     make_rename_transform,
 )
 from .pipe import (
-    InProcessPipe,
-    InProcessPipeAllocator,
     Pipe,
-    PipeAllocator,
     PipeClosedError,
     PipeHandshakeError,
     PipeLinkedResponse,
     PipeOpenRequest,
     PipeTeardownError,
+    allocator,
     expect_pipe,
-    get_default_allocator,
     open_pipe,
 )
 from .queues import EventCodec, PayloadType, RabbitFanoutQueue
@@ -115,19 +112,16 @@ __all__ = [
     'EventFilter',
     'TargetBusProvider',
     'TransformFunc',
-    # pipe
+    # pipe（摊平 pipe.__all__，含 allocator 子包）
+    'allocator',
     'PipeHandshakeError',
     'PipeClosedError',
     'PipeTeardownError',
     'PipeLinkedResponse',
     'PipeOpenRequest',
     'Pipe',
-    'InProcessPipe',
-    'InProcessPipeAllocator',
-    'PipeAllocator',
     'open_pipe',
     'expect_pipe',
-    'get_default_allocator',
     # register
     'ModuleEventRegister',
     'ModuleHandlerRegister',

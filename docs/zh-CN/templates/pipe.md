@@ -13,6 +13,15 @@
 
 本模块依赖 [EventBus](../infinity_bus.md) 作为底层消息路由，并复用了 `request` 和 `expect` 模板来实现握手协议。
 
+分配器实现位于子包 `infinity_bus.templates.pipe.allocator`，**必须显式传入** `open_pipe` / `expect_pipe`——模板不提供默认实例：
+
+```python
+from infinity_bus.templates.pipe import expect_pipe, open_pipe
+from infinity_bus.templates.pipe.allocator import InProcessPipeAllocator
+
+allocator = InProcessPipeAllocator()
+```
+
 ---
 
 ## 核心概念
@@ -25,18 +34,63 @@
 
 通过一对**请求/响应事件**建立连接：
 
-- 客户端调用 `open_pipe` 发起请求，并通过 `InProcessPipeAllocator` 分配管道实例。
-- 服务端调用 `expect_pipe` 等待请求，从分配器中取出对应的管道实例，完成链路绑定。
+- 客户端调用 `open_pipe` 发起请求，并通过显式传入的分配器分配管道实例。
+- 服务端调用 `expect_pipe` 等待请求，通过 `allocator.checkout(pipe_id)` 领取本端端点，完成链路绑定。
 
-握手成功后，两端持有同一个 `Pipe` 实例的引用，可通过 `send` / `receive` 直接通信，无需再经过事件总线。
+握手成功后，两端通过 `send` / `receive` 直接通信，不再经过事件总线。**「两端如何持有管道」由分配器实现决定**：
+
+- **同进程**（内置 `InProcessPipeAllocator`）：两端各持**一个端点对象**，共享同一双向通道但两个方向独立缓冲——任一端只会读到入站方向的数据，不会读到本端发出的消息。
+- **跨进程**（自定义 `PipeAllocator`）：两端**各持一个** `Pipe` 对象（各自的本地缓冲 + 各自的传输句柄），以 `pipe_id` 作为会合键；`Pipe` 对象本身不会被传递。
+
+#### 跨进程实现的约定
+
+`pipe` 子包不对传输层做任何假设，跨进程语义完全由两端的分配器约定。实现时需满足：
+
+1. **拨号时机**：客户端必须在 `allocate()` 阶段发起数据面连接。`expect_pipe` 在发布握手响应**之前**调用 `allocator.checkout(pipe_id)`；若服务端在该调用中等待一个「响应之后才会发生」的拨号，双方会互相等待直至 `Handshake timeout`。
+2. **会合键**：`pipe_id` 是不透明字符串，服务端据此领取已接入的连接。地址、令牌、参数如何编码进 `pipe_id`，属于两端分配器的私有协议，模板不做解析。
+3. **端点归属**：服务端可以自持数据面端点（例如 WebSocket 监听器），在分配器生命周期内启动一次，并在 `checkout()` 中按 `pipe_id` 交付连接。
+4. **严格 P2P**：一个 `pipe_id` 只对应一对端点，管道不承担多路复用；`expect_pipe` 为一次性接管，不应并发调用去争抢同一个握手请求。
+5. **关闭是终态**：`PipeClosedError` 表示管道已关闭且缓冲已耗尽；重连需要重新握手并分配新的 `pipe_id`。
 
 ### 进程内管道 (`InProcessPipe`)
 
-基于 `asyncio.Queue` 的默认实现，支持可配置的队列容量以提供背压控制。
+基于 `asyncio.Queue` 的内置**全双工**实现：`create_pair()` 创建共享同一双向通道的一对端点，每个方向有独立队列，双向并发收发互不串台；`maxsize` 为单方向容量，提供背压。
 
 ### 管道分配器 (`PipeAllocator` / `InProcessPipeAllocator`)
 
-抽象基类 `PipeAllocator` 定义了管道生命周期管理接口，`InProcessPipeAllocator` 是其默认进程内实现，用于在握手期间临时存储管道实例，确保客户端与服务端能找到同一个管道对象。
+抽象基类 `PipeAllocator` 定义了管道生命周期管理接口，位于子包 `infinity_bus.templates.pipe.allocator`：`allocate()` 创建一对端点并返回分配方端点，`checkout()` 领取借用方端点，`checkin()` 归还，`release()` 销毁整条管道。
+
+分配器必须由调用方显式传入，模板不提供模块级默认实例。跨进程传输通过实现自定义 `PipeAllocator` 支持（见上文「跨进程实现的约定」），模板本身无需改动。
+
+### 内置跨进程实现
+
+子包 `infinity_bus.templates.pipe.allocator` 提供两套跨进程传输：
+
+| 传输 | 端点 | 客户端分配器 | 服务端分配器 | 依赖 |
+| ---- | ---- | ---- | ---- | ---- |
+| 进程间（`multiprocessing.connection`） | `ProcessPipe` | `ProcessPipeClientAllocator` | `ProcessPipeServerAllocator` | 标准库 |
+| WebSocket（aiohttp） | `WsPipe` | `WsPipeClientAllocator` | `WsPipeServerAllocator` | `aiohttp`（`infinity_bus[ws]`） |
+
+两者遵循同一约定：`allocate()` 先建立数据面连接并发送首帧 `pipe_id`；服务端 accept 后按
+`pipe_id` 寄存，`checkout()` 领取；帧载荷按构造时传入的 `payload_type` 编解码。
+
+```python
+from infinity_bus.templates.pipe.allocator import (
+    ProcessPipeClientAllocator,
+    ProcessPipeServerAllocator,
+)
+
+# 服务端：自持监听器，启动一次
+server_alloc = ProcessPipeServerAllocator(('0.0.0.0', 8765), MyPayload, authkey=b'secret')
+await server_alloc.start()
+
+# 客户端：数据面直连（allocate() 阶段完成拨号）
+client_alloc = ProcessPipeClientAllocator(('server-host', 8765), MyPayload, authkey=b'secret')
+async with open_pipe(bus, 'pipe.connect', 'pipe.linked', client_alloc) as pipe:
+    ...
+```
+
+`ProcessPipe` 底层 `Connection` 是阻塞 API 且 `close()` 不会唤醒其他线程中阻塞的读，因此接收侧在事件循环内用 `poll(0)` + 短间隔轮询，发送侧经 `asyncio.to_thread`；`authkey` 提供数据面鉴权。`WsPipe` 使用 aiohttp 入站泵，背压由 WebSocket flow control 提供，关闭帧由泵处理。
 
 ---
 
@@ -66,16 +120,18 @@ class Pipe(ABC):
 
 ```python
 class PipeAllocator(ABC):
-    async def allocate(self, **kwargs: dict[str, Any]) -> str
+    async def allocate(self, **kwargs: Any) -> tuple[str, Pipe]
     async def release(self, pipe_id: str) -> None
-    async def get(self, pipe_id: str) -> Pipe | None
+    async def checkout(self, pipe_id: str) -> Pipe | None
+    async def checkin(self, pipe_id: str) -> None
 ```
 
 | 方法 | 说明 |
 | ---- | ---- |
-| `allocate(**kwargs)` | 创建一个管道实例并返回其唯一标识符。关键字参数会传递给具体管道类型的构造函数。 |
-| `release(pipe_id)` | 释放指定管道，从分配器中移除。 |
-| `get(pipe_id)` | 获取管道实例，不存在时返回 `None`。 |
+| `allocate(**kwargs)` | 分配一条新管道，返回 `(pipe_id, 分配方本端端点)`；关键字参数透传给具体管道构造函数。 |
+| `release(pipe_id)` | 释放整条管道：关闭两端端点并注销。幂等，由分配方在退出时调用。 |
+| `checkout(pipe_id)` | 借用方（服务端）领取自己的端点，不存在时返回 `None`。 |
+| `checkin(pipe_id)` | 借用方归还自己的端点并注销，不销毁分配方资源。幂等。 |
 
 ### `InProcessPipeAllocator`
 
@@ -83,12 +139,14 @@ class PipeAllocator(ABC):
 
 ```python
 class InProcessPipeAllocator(PipeAllocator):
-    def __init__(self, pipe_type: type[Pipe] = InProcessPipe)
+    def __init__(self, pipe_type: type[InProcessPipe] = InProcessPipe)
 ```
 
-- 构造参数 `pipe_type` 指定默认的管道类型，`allocate()` 时会用该类型创建实例。
-- `allocate(**kwargs)` 接受关键字参数并透传给 `pipe_type` 的构造函数（例如 `InProcessPipe(maxsize=10)`）。
-- `open_pipe` 和 `expect_pipe` 默认共享一个模块级 `InProcessPipeAllocator` 实例（通过 `get_default_allocator()` 获取），也可通过 `allocator` 参数传入自定义实例。
+- `pipe_type` 必须是 `InProcessPipe`（或其子类），并支持 `create_pair()`。
+- `allocate(**kwargs)` 创建一对端点，返回 `(pipe_id, 分配方端点)`，`kwargs` 透传给 `create_pair()`（例如 `maxsize=10`）。
+- `checkout(pipe_id)` 返回借用方端点；`checkin(pipe_id)` 归还并关闭它。
+- `release(pipe_id)` 关闭两端端点并注销整条管道。
+- `open_pipe` / `expect_pipe` 需要显式传入同一个分配器实例，不存在模块级默认实例。
 
 ### `InProcessPipe`
 
@@ -97,10 +155,14 @@ class InProcessPipeAllocator(PipeAllocator):
 ```python
 class InProcessPipe(Pipe):
     def __init__(self, maxsize: int | None = None)
+
+    @classmethod
+    def create_pair(cls, maxsize: int | None = None) -> tuple[InProcessPipe, InProcessPipe]
 ```
 
-- `maxsize` 直接传递给内部的 `asyncio.Queue`，`None` 表示无限容量。
-- `receive()` 内部使用 `asyncio.wait` 同时等待新数据或管道关闭信号，确保关闭时能及时抛出 `PipeClosedError`。
+- `create_pair()` 创建一对共享双向通道的端点，每个方向独立队列；`maxsize` 是**单方向**容量，`None` 表示无限制。
+- `InProcessPipe(maxsize=...)` 直接构造得到的是自环端点（写入由自身读回），仅用于单端测试，不表达两端通信语义。
+- `receive()` 等待入站数据或**对端关闭**信号；对端关闭后先读完缓冲区，再抛 `PipeClosedError`。
 
 ### `open_pipe` (客户端上下文管理器)
 
@@ -110,9 +172,9 @@ async def open_pipe(
     bus_proxy: EventBus.Proxy,
     req_event: str,
     resp_event: str,
+    allocator: PipeAllocator,
     handshake_timeout: float = 5.0,
     session_id: str | None = None,
-    allocator: InProcessPipeAllocator | None = None,
     pipe_kargs: dict[str, Any] | None = None,
 ) -> AsyncIterator[Pipe]
 ```
@@ -124,11 +186,11 @@ async def open_pipe(
 | `resp_event` | `str` | 握手响应事件名。 |
 | `handshake_timeout` | `float` | 握手超时时间（秒）。超时抛出 `PipeHandshakeError`。 |
 | `session_id` | `str \| None` | 用于关联请求-响应的会话 ID，若未提供则自动生成。 |
-| `allocator` | `InProcessPipeAllocator \| None` | 管道分配器实例。若未提供则使用模块级默认实例（`get_default_allocator()`）。 |
+| `allocator` | `PipeAllocator` | 管道分配器实例，**必填**。同进程场景两端必须传入同一个实例。 |
 | `pipe_kargs` | `dict[str, Any] \| None` | 传递给管道构造函数的关键字参数字典（如 `{"maxsize": 10}`），会透传给 `allocator.allocate(**pipe_kargs)`。 |
 
 **Yields**
-一个已握手成功并处于打开状态的 `Pipe` 实例。退出上下文时自动关闭管道并从分配器中释放。
+一个已握手成功并处于打开状态的 `Pipe` 实例。退出上下文时关闭管道并调用 `allocator.release(pipe_id)`。
 
 **异常**
 
@@ -143,9 +205,9 @@ async def expect_pipe(
     bus_proxy: EventBus.Proxy,
     req_event: str,
     resp_event: str,
+    allocator: PipeAllocator,
     session_id: str | None = None,
     timeout: float = 5.0,
-    allocator: InProcessPipeAllocator | None = None,
 ) -> AsyncIterator[Pipe]
 ```
 
@@ -156,17 +218,18 @@ async def expect_pipe(
 | `resp_event` | `str` | 用于回复握手结果的事件名。 |
 | `session_id` | `str \| None` | 用于筛选的会话 id，只响应指定会话 id 的请求。 |
 | `timeout` | `float` | 等待握手请求的超时时间（秒）。超时抛出 `PipeHandshakeError`。 |
-| `allocator` | `InProcessPipeAllocator \| None` | 管道分配器实例。若未提供则使用模块级默认实例（`get_default_allocator()`）。 |
+| `allocator` | `PipeAllocator` | 管道分配器实例，**必填**。同进程场景两端必须传入同一个实例。 |
 
 **Yields**
-握手成功后，返回从分配器中取出的 `Pipe` 实例。退出上下文时自动关闭管道。
+握手成功后，返回 `allocator.checkout(pipe_id)` 领取到的 `Pipe` 实例。退出上下文时关闭管道并调用 `allocator.checkin(pipe_id)` 归还端点。
 
 **握手流程**
 
 1. 使用 `expect` 监听 `req_event`，等待 `PipeOpenRequest` 事件，并通过 `session_id` 筛选（若提供）。
-2. 收到请求后，根据 `pipe_id` 从 `InProcessPipeAllocator` 中获取对应的管道。
+2. 收到请求后，调用 `allocator.checkout(pipe_id)` 领取借用方端点。
 3. 若管道不存在，发布一个 `success=False` 的 `PipeLinkedResponse` 并抛出 `PipeHandshakeError`。
-4. 若存在，发布 `success=True` 的 `PipeLinkedResponse`，然后 `yield` 管道（管道的释放由客户端 `open_pipe` 在退出时负责）。
+4. 若存在，发布 `success=True` 的 `PipeLinkedResponse`，然后 `yield` 管道。
+5. 退出上下文时关闭管道并调用 `allocator.checkin(pipe_id)` 归还端点（资源由分配方的 `release()` 收尾）。
 
 ---
 
@@ -197,18 +260,18 @@ class PipeLinkedResponse(ResponseProtocol):
 ```Text
 客户端 (open_pipe)                          服务端 (expect_pipe)
       |                                             |
-      |  1. 创建 Pipe 实例，通过 InProcessPipeAllocator 分配    |
+      |  1. 通过分配器创建 Pipe 实例                     |
       |-------------------------------------------->|
       |  2. 发布 PipeOpenRequest 事件 (req_event)    |
       |                                             |
       |                                             |  3. 监听 req_event，收到请求
-      |                                             |  4. 从分配器获取 Pipe，并释放（转移所有权）
+      |                                             |  4. checkout 领取借用方端点
       |                                             |  5. 发布 PipeLinkedResponse (resp_event)
       |  6. 收到成功响应                             |
       |<--------------------------------------------|
       |                                             |
       |  7. 进入 async with pipe 块                  |  7. 进入 async with pipe 块
-      |     两端持有同一 Pipe 实例，可直接 send/receive |
+      |     两端各持端点，可同时双向收发             |
       |                                             |
       |  8. 退出上下文，关闭管道并清理注册表残留         |  8. 退出上下文，关闭管道
 ```
@@ -217,13 +280,15 @@ class PipeLinkedResponse(ResponseProtocol):
 
 ## 使用示例
 
+以下示例假设已创建共享的 `allocator = InProcessPipeAllocator()`（同进程场景两端必须使用同一个分配器实例，但各自持有不同端点）。
+
 ### 基础双向通信
 
 **服务端**（等待连接）
 
 ```python
 async def server_task(bus_proxy):
-    async with expect_pipe(bus_proxy, "pipe.connect", "pipe.linked") as pipe:
+    async with expect_pipe(bus_proxy, "pipe.connect", "pipe.linked", allocator) as pipe:
         print("Pipe connected")
         while True:
             data = await pipe.receive()
@@ -238,7 +303,7 @@ async def server_task(bus_proxy):
 
 ```python
 async def client_task(bus_proxy):
-    async with open_pipe(bus_proxy, "pipe.connect", "pipe.linked") as pipe:
+    async with open_pipe(bus_proxy, "pipe.connect", "pipe.linked", allocator) as pipe:
         await pipe.send(SomeRequestModel(command="hello"))
         reply = await pipe.receive()
         print(f"Reply: {reply}")
@@ -274,18 +339,20 @@ class TcpPipe(Pipe):
         return SomeModel.parse_raw(line)
 ```
 
-使用时通过自定义 `allocator` 指定管道类型：
+自定义管道需要配套实现自己的 `PipeAllocator`（见上文「跨进程实现的约定」）；`InProcessPipeAllocator` 只接受 `InProcessPipe` 及其子类：
 
 ```python
-allocator = InProcessPipeAllocator(pipe_type=TcpPipe)
-async with open_pipe(bus, "tcp.connect", "tcp.linked", allocator=allocator) as pipe:
+class TcpPipeAllocator(PipeAllocator):
+    ...  # 负责创建本端与对端凭据，并实现 allocate() / release() / checkout() / checkin()
+
+async with open_pipe(bus, "tcp.connect", "tcp.linked", allocator=TcpPipeAllocator(...)) as pipe:
     ...
 ```
 
 或者通过 `pipe_kargs` 传递构造参数：
 
 ```python
-async with open_pipe(bus, "pipe.req", "pipe.resp", pipe_kargs={"maxsize": 10}) as pipe:
+async with open_pipe(bus, "pipe.req", "pipe.resp", allocator, pipe_kargs={"maxsize": 10}) as pipe:
     ...
 ```
 
@@ -293,7 +360,7 @@ async with open_pipe(bus, "pipe.req", "pipe.resp", pipe_kargs={"maxsize": 10}) a
 
 ```python
 try:
-    async with open_pipe(bus, "pipe.req", "pipe.resp", handshake_timeout=2.0) as pipe:
+    async with open_pipe(bus, "pipe.req", "pipe.resp", allocator, handshake_timeout=2.0) as pipe:
         await asyncio.wait_for(pipe.receive(), timeout=5.0)
 except PipeHandshakeError:
     print("Handshake failed")
