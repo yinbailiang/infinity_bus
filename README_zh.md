@@ -6,7 +6,7 @@
 [![Pyright](https://img.shields.io/badge/pyright-strict-blue)](ENGINEERING.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 [![PyPI Version](https://img.shields.io/pypi/v/infinity_bus)](https://pypi.org/project/infinity_bus/)
-[![Supported Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://pypi.org/project/infinity_bus/)
+[![Supported Python](https://img.shields.io/badge/python-3.14%2B-blue)](https://pypi.org/project/infinity_bus/)
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://yinbailiang.github.io/infinity_bus/)
 
 **强类型、可扩展的异步事件总线——中间件管道 + 高级模板。**
@@ -63,7 +63,7 @@
 | 防递归 | ✅ 中间件（可配置） | ✅ 内置（不可配置） | ❌ | N/A |
 | 日志与审计 | ✅ JSONL + SQLite（中间件） | ✅ 内置 JSONL WAL 日志 | ❌ 无内置 | ⚠️ 调试追踪 |
 | 测试覆盖 | ✅ 94%（422 tests） | ✅ 83%（138 tests） | ✅ 94%（43 tests） | ✅ 86%（167 tests） |
-| Python 版本 | 3.12+ | 3.11+ | 3.12+ | 3.7–3.14 |
+| Python 版本 | 3.14+ | 3.11+ | 3.12+ | 3.7–3.14 |
 | 基准版本 | v6.0.0 `32b43a5` | v1.5.6 `7c09342` | v13.0.1 `5157de2` | v4.0.7 `4ec2c47` |
 
 > **选择 InfinityBus 的理由**：你需要中间件原生架构——可热重载的洋葱管道，内置 7 个中间件（审计日志、指标、限流、转换、屏蔽、防递归、转发）；你要求整个代码库通过 pyright strict 且生产代码**零 `# type: ignore`**；你希望用单一核心依赖获得完整的生产级特性（背压、优雅停机、正则订阅、Pydantic 负载校验）。

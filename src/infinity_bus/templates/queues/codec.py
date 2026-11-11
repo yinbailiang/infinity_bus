@@ -84,7 +84,7 @@ class EventCodec:
                 continue
             try:
                 decoded.append(datetime.fromisoformat(str(value)))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue  # 非标准时间戳：跳过该条，其余保真
         return decoded
 

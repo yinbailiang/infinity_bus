@@ -170,7 +170,7 @@ class EventHandlerRegistry:
             for handler in list(self._handlers.values()):  # 快照：允许嵌套 register
                 activated.append(handler)
                 await handler.on_activate(bus)
-        except (Exception, asyncio.CancelledError):
+        except Exception, asyncio.CancelledError:
             self._bus = None
             for handler in reversed(activated):
                 try:

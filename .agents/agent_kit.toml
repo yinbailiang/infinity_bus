@@ -3,7 +3,7 @@ kit_version = 1
 
 [project]
 name = "InfinityBus"
-summary = "强类型、可扩展的异步事件总线（Python 3.12+）"
+summary = "强类型、可扩展的异步事件总线（Python 3.14+）"
 package = "infinity_bus"
 src_dir = "src/infinity_bus"
 repo_url = "https://github.com/yinbailiang/infinity_bus"

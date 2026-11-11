@@ -270,7 +270,7 @@ chore: bump version to 1.5.2
 
 ## CI
 
-测试矩阵覆盖 Python 3.12+，每次 push 自动运行 `pytest` + `pre-commit`。
+测试矩阵覆盖 Python 3.14+，每次 push 自动运行 `pytest` + `pre-commit`。
 
 ```yaml
 # .github/workflows/test.yml

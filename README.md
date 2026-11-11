@@ -6,7 +6,7 @@
 [![Pyright](https://img.shields.io/badge/pyright-strict-blue)](ENGINEERING.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 [![PyPI Version](https://img.shields.io/pypi/v/infinity_bus)](https://pypi.org/project/infinity_bus/)
-[![Supported Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://pypi.org/project/infinity_bus/)
+[![Supported Python](https://img.shields.io/badge/python-3.14%2B-blue)](https://pypi.org/project/infinity_bus/)
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://yinbailiang.github.io/infinity_bus/)
 
 **Strongly-typed, extensible async event bus — middleware pipeline + advanced templates.**
@@ -63,7 +63,7 @@
 | Recursion Guard | ✅ middleware (configurable) | ✅ built-in (non-configurable) | ❌ | N/A |
 | Logging & Auditing | ✅ JSONL + SQLite (middleware) | ✅ built-in JSONL WAL logging | ❌ no built-in | ⚠️ debug tracing |
 | Test Coverage | ✅ 94% (422 tests) | ✅ 83% (138 tests) | ✅ 94% (43 tests) | ✅ 86% (167 tests) |
-| Python Version | 3.12+ | 3.11+ | 3.12+ | 3.7–3.14 |
+| Python Version | 3.14+ | 3.11+ | 3.12+ | 3.7–3.14 |
 | Baseline Version | v6.0.0 `32b43a5` | v1.5.6 `7c09342` | v13.0.1 `5157de2` | v4.0.7 `4ec2c47` |
 
 > **Choose InfinityBus when**: you need a middleware-native architecture — hot-reloadable onion pipeline with 7 built-in middlewares (audit logging, metrics, rate-limit, transform, block, recursion guard, forwarding); you run pyright strict across the entire codebase with literally zero `# type: ignore` in any production code; you want full production-grade features (backpressure, graceful shutdown, regex subscriptions, Pydantic payload validation) with a single core dependency.
