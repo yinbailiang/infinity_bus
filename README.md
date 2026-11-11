@@ -187,6 +187,11 @@ Package type annotations are normalized to PEP 585/604.
 annotations (including locally defined payload classes), OpenTelemetry observable gauges
 return iterable observations, and `Event.model_dump()` preserves concrete payload fields.
 
+**v8.0.0 (breaking)**: Python 3.12 and 3.13 are no longer supported; the minimum
+required version is Python 3.14. CI, package metadata, and tool targets are aligned
+to Python 3.14, existing exception groups use PEP 758 syntax, and new code can rely
+on PEP 649 deferred annotation evaluation instead of quoting forward references.
+
 ## 🚀 Quick Start
 
 ### Basic Pub/Sub
