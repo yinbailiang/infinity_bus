@@ -43,6 +43,9 @@ templates = [
     "opentelemetry-api",
     "opentelemetry-sdk",
 ]
+ws = [
+    "aiohttp",
+]
 docs = [
     "mkdocs-material",
     "mkdocs-static-i18n",
@@ -52,6 +55,7 @@ test = [
     "pytest-cov",
     "pytest-asyncio",
     "infinity_bus[templates]",
+    "infinity_bus[ws]",
 ]
 dev = [
     "interrogate",
@@ -60,7 +64,7 @@ dev = [
     "pre-commit",
     "infinity_bus[templates]",
     "infinity_bus[test]",
-    "infinity-agent-kit>=1.1.0",
+    "infinity-agent-kit==1.2.0",
 ]
 
 [tool.pytest.ini_options]

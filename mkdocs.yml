@@ -98,7 +98,18 @@ nav:
           - Overview: templates/handlers/handlers.md
           - service: templates/handlers/service.md
           - mailbox: templates/handlers/mailbox.md
-      - pipe: templates/pipe.md
+      - pipe:
+          - Overview: templates/pipe/pipe.md
+          - base: templates/pipe/base.md
+          - protocol: templates/pipe/protocol.md
+          - codec: templates/pipe/codec.md
+          - handshake: templates/pipe/handshake.md
+          - allocator:
+              - Overview: templates/pipe/allocator/allocator.md
+              - base: templates/pipe/allocator/base.md
+              - inprocess: templates/pipe/allocator/inprocess.md
+              - process: templates/pipe/allocator/process.md
+              - ws: templates/pipe/allocator/ws.md
       - idempotency: templates/idempotency.md
       - register: templates/register.md
       - Middlewares:
