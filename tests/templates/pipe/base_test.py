@@ -11,7 +11,7 @@ from infinity_bus.templates.pipe import (
 )
 
 
-class _FakePipe(Pipe):
+class _FakePipe(Pipe[BaseModel]):
     """记录 open/close 调用的最小实现。"""
 
     def __init__(self) -> None:
@@ -37,7 +37,7 @@ class _FakePipe(Pipe):
 def test_pipe_is_abstract() -> None:
     """Pipe 不能直接实例化，子类必须实现四个抽象方法。"""
     with pytest.raises(TypeError):
-        Pipe()  # type: ignore[abstract]
+        Pipe[BaseModel]()  # type: ignore[abstract]
 
 
 def test_pipe_error_hierarchy() -> None:

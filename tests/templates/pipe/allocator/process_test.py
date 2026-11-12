@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import AsyncGenerator
+from multiprocessing.connection import Client
 
 import pytest
 from pydantic import BaseModel
@@ -145,3 +146,48 @@ async def test_single_role_methods_raise() -> None:
         await server.allocate()
     with pytest.raises(NotImplementedError):
         await client.checkout('x')
+
+
+@pytest.mark.asyncio
+async def test_silent_hello_does_not_break_listener() -> None:
+    """连上但不发 hello 的连接超时后，监听器仍可服务后续客户端。"""
+    server = ProcessPipeServerAllocator(
+        ('127.0.0.1', 0), Payload, authkey=AUTHKEY, accept_timeout=2.0, hello_timeout=0.2
+    )
+    await server.start()
+    silent = Client(server.address, authkey=AUTHKEY)
+    try:
+        await asyncio.sleep(0.05)
+        client = ProcessPipeClientAllocator(server.address, Payload, authkey=AUTHKEY, connect_timeout=2.0)
+        pipe_id, _ = await client.allocate()
+        server_pipe = await server.checkout(pipe_id)
+        assert server_pipe is not None
+        await client.release(pipe_id)
+        await server.checkin(pipe_id)
+        assert server._thread is not None and server._thread.is_alive()
+    finally:
+        silent.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_invalid_utf8_hello_does_not_kill_listener() -> None:
+    """非法 UTF-8 hello 只关闭该连接，不影响后续配对。"""
+    server = ProcessPipeServerAllocator(
+        ('127.0.0.1', 0), Payload, authkey=AUTHKEY, accept_timeout=2.0, hello_timeout=0.2
+    )
+    await server.start()
+    bad = Client(server.address, authkey=AUTHKEY)
+    try:
+        bad.send_bytes(b'\xff\xfe')
+        await asyncio.sleep(0.2)
+        client = ProcessPipeClientAllocator(server.address, Payload, authkey=AUTHKEY, connect_timeout=2.0)
+        pipe_id, _ = await client.allocate()
+        server_pipe = await server.checkout(pipe_id)
+        assert server_pipe is not None
+        await client.release(pipe_id)
+        await server.checkin(pipe_id)
+        assert server._thread is not None and server._thread.is_alive()
+    finally:
+        bad.close()
+        await server.stop()

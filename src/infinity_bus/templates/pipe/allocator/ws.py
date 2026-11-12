@@ -7,22 +7,20 @@
 - 客户端 ``allocate()`` 连接 ``url`` 并发送同一帧，随后返回本端端点；
 - ``expect_pipe`` 通过 ``checkout(pipe_id)`` 领取连接，``checkin()`` 归还。
 
-依赖：``aiohttp``（``pip install infinity_bus[ws]``）。模块惰性导入，缺失时在创建
-分配器/端点时抛 ``ImportError``。
+依赖：``aiohttp``（``pip install infinity_bus[ws]``）。模块导入时会尝试加载 aiohttp，
+缺失时在 ``start()`` / ``allocate()`` 等实际使用点抛 ``ImportError``。
 """
-
-from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import uuid
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel
 
-from ..base import Pipe, PipeClosedError, PipeHandshakeError
-from ..codec import PayloadType, decode_payload, encode_payload
+from ..base import Pipe, PipeClosedError, PipeHandshakeError, cancel_tasks
+from ..codec import decode_payload, encode_payload
 from .base import SingleRoleAllocator
 
 logger = logging.getLogger(__name__)
@@ -55,17 +53,19 @@ def _require_web() -> Any:
     return _aiohttp_web
 
 
-class WsPipe(Pipe):
+class WsPipe[PayloadType: BaseModel](Pipe[PayloadType]):
     """WebSocket 双向管道端点，aiohttp 的客户端与服务端连接通用。
 
     每个端点持有一个入站队列与一个后台泵任务：泵从 WebSocket 读取帧并解码入队，
     关闭帧/异常时结束。服务端 handler 因此也能通过泵完成关闭握手与心跳处理。
     """
 
-    def __init__(self, ws: Any, payload_type: PayloadType, maxsize: int | None = None) -> None:
+    def __init__(self, ws: Any, payload_type: type[PayloadType], maxsize: int | None = None) -> None:
         self._ws = ws
         self._payload_type = payload_type
-        self._inbound: asyncio.Queue[BaseModel] = asyncio.Queue() if maxsize is None else asyncio.Queue(maxsize=maxsize)
+        self._inbound: asyncio.Queue[PayloadType] = (
+            asyncio.Queue() if maxsize is None else asyncio.Queue(maxsize=maxsize)
+        )
         self._closed = False
         self._closed_event = asyncio.Event()
         self._pump: asyncio.Task[None] | None = None
@@ -87,10 +87,15 @@ class WsPipe(Pipe):
                     await self._inbound.put(decode_payload(msg.data, self._payload_type))
                 elif msg.type == aiohttp.WSMsgType.TEXT:
                     await self._inbound.put(decode_payload(msg.data.encode('utf-8'), self._payload_type))
+                elif msg.type == aiohttp.WSMsgType.ERROR:
+                    logger.warning('WebSocket 管道收到错误帧: %s', self._ws.exception())
+                    break
                 else:
                     break
-        except (ConnectionError, RuntimeError):
-            pass
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning('WebSocket 管道泵异常退出', exc_info=True)
         finally:
             self._mark_closed()
 
@@ -102,7 +107,7 @@ class WsPipe(Pipe):
         """等待端点关闭（由 ``close()``、关闭帧或泵异常触发）。"""
         await self._closed_event.wait()
 
-    async def send(self, data: BaseModel) -> None:
+    async def send(self, data: PayloadType) -> None:
         """发送一条负载；连接已关闭时抛 ``PipeClosedError``。"""
         if self._closed or self._ws.closed:
             raise PipeClosedError('Pipe is closed')
@@ -112,28 +117,35 @@ class WsPipe(Pipe):
             self._mark_closed()
             raise PipeClosedError('Pipe is closed') from e
 
-    async def receive(self) -> BaseModel:
+    async def receive(self) -> PayloadType:
         """读取一条负载；连接关闭且缓冲区耗尽时抛 ``PipeClosedError``。"""
-        get_task: asyncio.Task[BaseModel] = asyncio.create_task(self._inbound.get())
-        wait_task: asyncio.Task[Literal[True]] = asyncio.create_task(self._closed_event.wait())
-        done, _ = await asyncio.wait([get_task, wait_task], return_when=asyncio.FIRST_COMPLETED)
-
-        if get_task in done:
-            wait_task.cancel()
+        while True:
             try:
-                await wait_task
-            except asyncio.CancelledError:
+                data: PayloadType = self._inbound.get_nowait()
+            except asyncio.QueueEmpty:
                 pass
-            data: BaseModel = get_task.result()
-            self._inbound.task_done()
-            return data
+            else:
+                self._inbound.task_done()
+                return data
 
-        get_task.cancel()
-        try:
-            await get_task
-        except asyncio.CancelledError:
-            pass
-        raise PipeClosedError('Pipe is closed')
+            if self._closed:
+                raise PipeClosedError('Pipe is closed')
+
+            get_task: asyncio.Task[PayloadType] = asyncio.create_task(self._inbound.get())
+            closed_task: asyncio.Task[bool] = asyncio.create_task(self._closed_event.wait())
+            tasks: tuple[asyncio.Task[Any], ...] = (get_task, closed_task)
+            try:
+                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            except BaseException:
+                await cancel_tasks(tasks)
+                raise
+
+            await cancel_tasks(pending)
+            if get_task in done:
+                data = get_task.result()
+                self._inbound.task_done()
+                return data
+            # 关闭先到：回到循环顶部排空缓冲，再抛错。
 
     async def close(self) -> None:
         """停止泵并关闭 WebSocket；重复调用无副作用。"""
@@ -145,35 +157,46 @@ class WsPipe(Pipe):
                 await pump
             except asyncio.CancelledError:
                 pass
+            except Exception:
+                logger.warning('WebSocket 管道泵关闭异常', exc_info=True)
         try:
             await asyncio.wait_for(self._ws.close(), timeout=0.5)
-        except (asyncio.TimeoutError, ConnectionError, RuntimeError):
+        except asyncio.TimeoutError, ConnectionError, OSError, RuntimeError:
             pass
 
 
-class WsPipeServerAllocator(SingleRoleAllocator):
+class WsPipeServerAllocator[PayloadType: BaseModel](SingleRoleAllocator[PayloadType]):
     """服务端分配器：自持一个 WebSocket 监听器，按首帧 ``pipe_id`` 配对连接。"""
 
     def __init__(
         self,
         host: str,
         port: int,
-        payload_type: PayloadType,
+        payload_type: type[PayloadType],
         *,
         path: str = '/pipe',
         accept_timeout: float = 5.0,
+        hello_timeout: float = 2.0,
+        max_pending: int = 64,
+        maxsize: int | None = None,
+        shutdown_timeout: float = 5.0,
     ) -> None:
         self._host = host
         self._port = port
         self._path = path if path.startswith('/') else f'/{path}'
         self._payload_type = payload_type
         self._accept_timeout = accept_timeout
+        self._hello_timeout = hello_timeout
+        self._max_pending = max_pending
+        self._maxsize = maxsize
+        self._shutdown_timeout = shutdown_timeout
         self._app: Any = None
         self._runner: Any = None
         self._site: Any = None
-        self._pending: dict[str, WsPipe] = {}
-        self._active: dict[str, WsPipe] = {}
-        self._waiters: dict[str, asyncio.Future[WsPipe]] = {}
+        self._handshakes: set[Any] = set()
+        self._pending: dict[str, WsPipe[PayloadType]] = {}
+        self._active: dict[str, WsPipe[PayloadType]] = {}
+        self._waiters: dict[str, asyncio.Future[WsPipe[PayloadType]]] = {}
 
     @property
     def port(self) -> int:
@@ -187,7 +210,7 @@ class WsPipeServerAllocator(SingleRoleAllocator):
         web = _require_web()
         self._app = web.Application()
         self._app.router.add_get(self._path, self._handle_ws)
-        self._runner = web.AppRunner(self._app)
+        self._runner = web.AppRunner(self._app, shutdown_timeout=self._shutdown_timeout)
         await self._runner.setup()
         self._site = web.TCPSite(self._runner, self._host, self._port)
         await self._site.start()
@@ -203,39 +226,58 @@ class WsPipeServerAllocator(SingleRoleAllocator):
         web = _require_web()
         ws = web.WebSocketResponse()
         await ws.prepare(request)
+        self._handshakes.add(ws)
 
         try:
-            hello = await ws.receive()
+            hello = await asyncio.wait_for(ws.receive(), timeout=self._hello_timeout)
             if hello.type != aiohttp.WSMsgType.TEXT:
                 await ws.close()
                 return ws
             pipe_id = str(json.loads(hello.data)['pipe_id'])
+        except asyncio.TimeoutError:
+            logger.warning('WebSocket 管道 hello 超时，关闭连接')
+            await ws.close()
+            return ws
         except Exception:  # 握手帧非法：拒绝连接
             logger.warning('拒绝无效的管道握手帧', exc_info=True)
             await ws.close()
             return ws
+        finally:
+            self._handshakes.discard(ws)
 
-        pipe = WsPipe(ws, self._payload_type)
+        pipe = WsPipe(ws, self._payload_type, maxsize=self._maxsize)
         await pipe.open()
         self._register(pipe_id, pipe)
         try:
             await pipe.wait_closed()
         finally:
-            await pipe.close()
+            try:
+                await pipe.close()
+            except Exception:
+                logger.exception('关闭 WebSocket 管道失败')
         return ws
 
-    def _register(self, pipe_id: str, pipe: WsPipe) -> None:
+    def _register(self, pipe_id: str, pipe: WsPipe[PayloadType]) -> None:
         waiter = self._waiters.pop(pipe_id, None)
         if waiter is not None and not waiter.done():
             waiter.set_result(pipe)
-        else:
-            self._pending[pipe_id] = pipe
+            return
+        if waiter is not None:
+            # checkout 已超时或取消：关闭连接，避免无人认领的端点泄漏
+            asyncio.get_running_loop().create_task(pipe.close())
+            return
+        if len(self._pending) >= self._max_pending:
+            oldest_id, oldest_pipe = next(iter(self._pending.items()))
+            self._pending.pop(oldest_id)
+            asyncio.get_running_loop().create_task(oldest_pipe.close())
+            logger.warning('WebSocket 管道 pending 达到上限，丢弃最旧连接: %s', oldest_id)
+        self._pending[pipe_id] = pipe
 
-    async def checkout(self, pipe_id: str) -> Pipe | None:
+    async def checkout(self, pipe_id: str) -> Pipe[PayloadType] | None:
         """领取指定 ``pipe_id`` 的端点；``accept_timeout`` 内未到达则返回 ``None``。"""
         pipe = self._pending.pop(pipe_id, None)
         if pipe is None:
-            waiter: asyncio.Future[WsPipe] = asyncio.get_running_loop().create_future()
+            waiter: asyncio.Future[WsPipe[PayloadType]] = asyncio.get_running_loop().create_future()
             self._waiters[pipe_id] = waiter
             try:
                 pipe = await asyncio.wait_for(waiter, timeout=self._accept_timeout)
@@ -257,10 +299,25 @@ class WsPipeServerAllocator(SingleRoleAllocator):
             await pipe.close()
 
     async def stop(self) -> None:
-        """停止监听器并清理所有未领走的连接。"""
+        """停止监听器并清理握手中与未领取的连接。"""
+        for waiter in list(self._waiters.values()):
+            if not waiter.done():
+                waiter.set_exception(PipeHandshakeError('Allocator stopped'))
+        self._waiters.clear()
+
+        for ws in list(self._handshakes):
+            try:
+                await asyncio.wait_for(ws.close(), timeout=0.5)
+            except asyncio.TimeoutError, ConnectionError, OSError, RuntimeError:
+                pass
+        self._handshakes.clear()
+
         # 先关管道，handler 才会从 wait_closed() 返回，runner 才能干净退出
         for pipe in [*self._pending.values(), *self._active.values()]:
-            await pipe.close()
+            try:
+                await pipe.close()
+            except Exception:
+                logger.exception('关闭 WebSocket 管道失败')
         self._pending.clear()
         self._active.clear()
 
@@ -272,23 +329,25 @@ class WsPipeServerAllocator(SingleRoleAllocator):
             self._runner = None
 
 
-class WsPipeClientAllocator(SingleRoleAllocator):
+class WsPipeClientAllocator[PayloadType: BaseModel](SingleRoleAllocator[PayloadType]):
     """客户端分配器：``allocate()`` 连接服务端并发送 hello。"""
 
     def __init__(
         self,
         url: str,
-        payload_type: PayloadType,
+        payload_type: type[PayloadType],
         *,
         connect_timeout: float = 5.0,
+        maxsize: int | None = None,
     ) -> None:
         self._url = url
         self._payload_type = payload_type
         self._connect_timeout = connect_timeout
+        self._maxsize = maxsize
         self._session: Any = None
-        self._pipes: dict[str, WsPipe] = {}
+        self._pipes: dict[str, WsPipe[PayloadType]] = {}
 
-    async def allocate(self, **kwargs: Any) -> tuple[str, Pipe]:
+    async def allocate(self, **kwargs: Any) -> tuple[str, Pipe[PayloadType]]:
         """连接服务端 WebSocket，发送 ``pipe_id`` 后返回 ``(pipe_id, 本端端点)``。"""
         aiohttp = _require_aiohttp()
         if self._session is None or self._session.closed:
@@ -304,7 +363,7 @@ class WsPipeClientAllocator(SingleRoleAllocator):
                 await ws.close()
             raise PipeHandshakeError(f'Pipe connect failed: {e}') from e
 
-        pipe = WsPipe(ws, self._payload_type)
+        pipe = WsPipe(ws, self._payload_type, maxsize=self._maxsize)
         self._pipes[pipe_id] = pipe
         return pipe_id, pipe
 

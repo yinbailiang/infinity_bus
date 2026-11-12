@@ -13,7 +13,7 @@ from infinity_bus.templates.pipe.allocator.ws import (
     WsPipeServerAllocator,
 )
 
-pytest.importorskip('aiohttp')
+aiohttp = pytest.importorskip('aiohttp')
 
 
 class Payload(BaseModel):
@@ -132,3 +132,55 @@ async def test_single_role_methods_raise() -> None:
         await server.allocate()
     with pytest.raises(NotImplementedError):
         await client.checkout('x')
+
+
+@pytest.mark.asyncio
+async def test_cancelled_receive_does_not_steal_message(
+    ws_pair: tuple[WsPipeClientAllocator, WsPipeServerAllocator, str, WsPipe, WsPipe],
+) -> None:
+    """取消 receive 后，后续消息仍应能被下一次 receive 取到。"""
+    _, _, _, client_pipe, server_pipe = ws_pair
+
+    recv_task = asyncio.create_task(server_pipe.receive())
+    await asyncio.sleep(0.05)
+    recv_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await recv_task
+
+    await client_pipe.send(Payload(value=42))
+    received = await asyncio.wait_for(server_pipe.receive(), timeout=0.5)
+    assert received.value == 42
+
+
+@pytest.mark.asyncio
+async def test_silent_hello_does_not_block_stop() -> None:
+    """握手前不发 hello 的连接不应拖住 stop。"""
+    server = WsPipeServerAllocator('127.0.0.1', 0, Payload, hello_timeout=0.2, shutdown_timeout=1.0)
+    await server.start()
+    session = aiohttp.ClientSession()
+    ws = await session.ws_connect(f'http://127.0.0.1:{server.port}/pipe')
+    try:
+        await asyncio.sleep(0.05)
+        await asyncio.wait_for(server.stop(), timeout=3.0)
+    finally:
+        await ws.close()
+        await session.close()
+
+
+@pytest.mark.asyncio
+async def test_invalid_frame_does_not_raise_on_stop() -> None:
+    """解码失败的帧只终止管道，不应让 stop 抛错。"""
+    server = WsPipeServerAllocator('127.0.0.1', 0, Payload, accept_timeout=1.0)
+    await server.start()
+    session = aiohttp.ClientSession()
+    ws = await session.ws_connect(f'http://127.0.0.1:{server.port}/pipe')
+    try:
+        await ws.send_json({'pipe_id': 'p1'})
+        pipe = await server.checkout('p1')
+        assert pipe is not None
+        await ws.send_bytes(b'not-json')
+        await asyncio.sleep(0.1)
+        await asyncio.wait_for(server.stop(), timeout=3.0)
+    finally:
+        await ws.close()
+        await session.close()

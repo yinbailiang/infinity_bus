@@ -24,6 +24,10 @@ from infinity_bus.templates.pipe import (
     open_pipe,
 )
 from infinity_bus.templates.pipe.allocator import InProcessPipeAllocator
+from infinity_bus.templates.pipe.allocator.process import (
+    ProcessPipeClientAllocator,
+    ProcessPipeServerAllocator,
+)
 
 
 # ------------------------------------------------------------------------------
@@ -85,12 +89,12 @@ async def event_bus() -> AsyncGenerator[EventBus, None]:
 
 
 @pytest.fixture
-def allocator() -> InProcessPipeAllocator:
+def allocator() -> InProcessPipeAllocator[SimplePayload]:
     """每个测试独立的进程内分配器（模板不再提供默认实例）。"""
     return InProcessPipeAllocator()
 
 
-class _RecordingAllocator(InProcessPipeAllocator):
+class _RecordingAllocator(InProcessPipeAllocator[SimplePayload]):
     """记录分配 / 释放 / 借还调用的分配器。"""
 
     def __init__(self) -> None:
@@ -99,7 +103,7 @@ class _RecordingAllocator(InProcessPipeAllocator):
         self.released: list[str] = []
         self.checked_in: list[str] = []
 
-    async def allocate(self, **kwargs: Any) -> tuple[str, Pipe]:
+    async def allocate(self, **kwargs: Any) -> tuple[str, Pipe[SimplePayload]]:
         pipe_id, pipe = await super().allocate(**kwargs)
         self.allocated.append(pipe_id)
         return pipe_id, pipe
@@ -117,7 +121,9 @@ class _RecordingAllocator(InProcessPipeAllocator):
 # 握手成功路径
 # ------------------------------------------------------------------------------
 @pytest.mark.asyncio
-async def test_open_and_expect_pipe_roundtrip(event_bus: EventBus, allocator: InProcessPipeAllocator) -> None:
+async def test_open_and_expect_pipe_roundtrip(
+    event_bus: EventBus, allocator: InProcessPipeAllocator[SimplePayload]
+) -> None:
     """握手成功后两端各持一个端点，可双向收发且互不串台。"""
     req_event = 'test.pipe.open'
     resp_event = 'test.pipe.linked'
@@ -145,7 +151,7 @@ async def test_open_and_expect_pipe_roundtrip(event_bus: EventBus, allocator: In
         resp_event=resp_event,
         allocator=allocator,
         handshake_timeout=2.0,
-        pipe_kargs={'maxsize': 10},
+        pipe_kwargs={'maxsize': 10},
     ) as client_pipe:
         await client_pipe.send(SimplePayload(value=42, msg='hello'))
         reply = await client_pipe.receive()
@@ -157,7 +163,9 @@ async def test_open_and_expect_pipe_roundtrip(event_bus: EventBus, allocator: In
 
 
 @pytest.mark.asyncio
-async def test_expect_pipe_with_session_id(event_bus: EventBus, allocator: InProcessPipeAllocator) -> None:
+async def test_expect_pipe_with_session_id(
+    event_bus: EventBus, allocator: InProcessPipeAllocator[SimplePayload]
+) -> None:
     """expect_pipe 指定 session_id 时仅匹配对应会话的管道请求。"""
     req_event = 'test.pipe.open'
     resp_event = 'test.pipe.linked'
@@ -187,7 +195,7 @@ async def test_expect_pipe_with_session_id(event_bus: EventBus, allocator: InPro
         allocator=allocator,
         session_id=target_session,
         handshake_timeout=2.0,
-        pipe_kargs={'maxsize': 10},
+        pipe_kwargs={'maxsize': 10},
     ) as client_pipe:
         await client_pipe.send(SimplePayload(value=42, msg='session_match'))
         ack = await client_pipe.receive()
@@ -201,7 +209,7 @@ async def test_expect_pipe_with_session_id(event_bus: EventBus, allocator: InPro
 # 握手失败路径
 # ------------------------------------------------------------------------------
 @pytest.mark.asyncio
-async def test_expect_pipe_timeout(event_bus: EventBus, allocator: InProcessPipeAllocator) -> None:
+async def test_expect_pipe_timeout(event_bus: EventBus, allocator: InProcessPipeAllocator[SimplePayload]) -> None:
     """测试 expect_pipe 在超时后抛出 PipeHandshakeError。"""
     with pytest.raises(PipeHandshakeError, match='Handshake timeout'):
         async with expect_pipe(
@@ -215,7 +223,9 @@ async def test_expect_pipe_timeout(event_bus: EventBus, allocator: InProcessPipe
 
 
 @pytest.mark.asyncio
-async def test_open_pipe_handshake_failure(event_bus: EventBus, allocator: InProcessPipeAllocator) -> None:
+async def test_open_pipe_handshake_failure(
+    event_bus: EventBus, allocator: InProcessPipeAllocator[SimplePayload]
+) -> None:
     """测试 open_pipe 在无人应答时抛出异常。"""
     with pytest.raises(PipeHandshakeError):
         async with open_pipe(
@@ -231,7 +241,7 @@ async def test_open_pipe_handshake_failure(event_bus: EventBus, allocator: InPro
 @pytest.mark.asyncio
 async def test_expect_pipe_request_filter_rejects_non_pipe_payload(
     event_bus: EventBus,
-    allocator: InProcessPipeAllocator,
+    allocator: InProcessPipeAllocator[SimplePayload],
 ) -> None:
     """request_filter 中 isinstance 检查失败时返回 False，expect_pipe 应超时。"""
     with pytest.raises(PipeHandshakeError, match='Handshake timeout'):
@@ -284,3 +294,86 @@ async def test_expect_pipe_releases_from_allocator(event_bus: EventBus) -> None:
 
     await task
     assert allocator.released == allocator.allocated, 'open_pipe 退出时应释放资源'
+
+
+@pytest.mark.asyncio
+async def test_expect_pipe_checks_in_when_response_publish_fails(
+    event_bus: EventBus,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """发布成功响应失败时，已 checkout 的端点必须归还。"""
+    allocator = _RecordingAllocator()
+    server_proxy = event_bus.proxy('server')
+    real_publish = server_proxy.publish
+
+    async def failing_publish(name: str, data: Any = None) -> None:
+        if name == 'test.pipe.linked':
+            raise RuntimeError('bus down')
+        await real_publish(name, data)
+
+    monkeypatch.setattr(server_proxy, 'publish', failing_publish)
+
+    async def server() -> None:
+        async with expect_pipe(
+            bus_proxy=server_proxy,
+            req_event='test.pipe.open',
+            resp_event='test.pipe.linked',
+            allocator=allocator,
+            timeout=2.0,
+        ):
+            pass
+
+    task = asyncio.create_task(server())
+    await asyncio.sleep(0)
+    pipe_id, _ = await allocator.allocate()
+    await event_bus.proxy('client').publish(
+        'test.pipe.open',
+        PipeOpenRequest(pipe_id=pipe_id, session_id='s', request_id='r').model_dump(),
+    )
+
+    with pytest.raises(PipeHandshakeError, match='bus down'):
+        await task
+
+    assert allocator.checked_in == [pipe_id]
+    assert await allocator.checkout(pipe_id) is None
+
+
+@pytest.mark.asyncio
+async def test_open_and_expect_pipe_with_process_transport(event_bus: EventBus) -> None:
+    """握手模板与进程间分配器的端到端组合。"""
+    server_alloc = ProcessPipeServerAllocator(('127.0.0.1', 0), SimplePayload, hello_timeout=0.2)
+    await server_alloc.start()
+    client_alloc = ProcessPipeClientAllocator(server_alloc.address, SimplePayload)
+
+    async def server() -> None:
+        async with expect_pipe(
+            bus_proxy=event_bus.proxy('server'),
+            req_event='test.pipe.open',
+            resp_event='test.pipe.linked',
+            allocator=server_alloc,
+            timeout=2.0,
+        ) as server_pipe:
+            received = await server_pipe.receive()
+            assert isinstance(received, SimplePayload)
+            assert received.value == 42
+            await server_pipe.send(SimplePayload(value=7))
+
+    task = asyncio.create_task(server())
+    await asyncio.sleep(0)
+
+    try:
+        async with open_pipe(
+            bus_proxy=event_bus.proxy('client'),
+            req_event='test.pipe.open',
+            resp_event='test.pipe.linked',
+            allocator=client_alloc,
+            handshake_timeout=2.0,
+        ) as client_pipe:
+            await client_pipe.send(SimplePayload(value=42))
+            reply = await client_pipe.receive()
+            assert isinstance(reply, SimplePayload)
+            assert reply.value == 7
+        await task
+    finally:
+        await client_alloc.stop()
+        await server_alloc.stop()

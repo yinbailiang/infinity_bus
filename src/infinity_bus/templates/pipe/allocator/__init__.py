@@ -14,7 +14,7 @@
 """
 
 from .base import PipeAllocator, SingleRoleAllocator
-from .inprocess import InProcessPipe, InProcessPipeAllocator
+from .inprocess import InProcessPipe, InProcessPipeAllocator, create_pair
 from .process import ProcessPipe, ProcessPipeClientAllocator, ProcessPipeServerAllocator
 from .ws import WsPipe, WsPipeClientAllocator, WsPipeServerAllocator
 
@@ -23,6 +23,7 @@ __all__ = [
     'SingleRoleAllocator',
     'InProcessPipe',
     'InProcessPipeAllocator',
+    'create_pair',
     'ProcessPipe',
     'ProcessPipeClientAllocator',
     'ProcessPipeServerAllocator',

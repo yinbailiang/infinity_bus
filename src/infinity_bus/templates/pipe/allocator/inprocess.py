@@ -2,114 +2,113 @@
 
 import asyncio
 import uuid
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel
 
-from ..base import Pipe, PipeClosedError
+from ..base import Pipe, PipeClosedError, cancel_tasks
 from .base import PipeAllocator
 
 
-def _make_queue(maxsize: int | None) -> asyncio.Queue[BaseModel]:
-    """按 maxsize 创建队列，``None`` 表示无限容量。"""
-    return asyncio.Queue() if maxsize is None else asyncio.Queue(maxsize=maxsize)
+class InProcessPipe[PayloadType: BaseModel](Pipe[PayloadType]):
+    """进程内管道端点：写入的数据由**对端**读走，两个方向各自独立缓冲。"""
 
+    def __init__(
+        self,
+        in_queue: asyncio.Queue[PayloadType],
+        out_queue: asyncio.Queue[PayloadType],
+        in_closed: asyncio.Event,
+        out_closed: asyncio.Event,
+    ) -> None:
+        self._inbound: asyncio.Queue[PayloadType] = in_queue
+        self._outbound: asyncio.Queue[PayloadType] = out_queue
+        self._inbound_closed: asyncio.Event = in_closed
+        self._outbound_closed: asyncio.Event = out_closed
 
-class InProcessPipe(Pipe):
-    """进程内管道端点：写入的数据由**对端**读走，两个方向各自独立缓冲。
-
-    两种构造方式：
-
-    - ``InProcessPipe.create_pair(maxsize=...)``：创建共享同一双向通道的一对端点，
-      ``InProcessPipeAllocator`` 使用这种方式；
-    - ``InProcessPipe(maxsize=...)``：自环端点，写入的数据由自身 ``receive()`` 读回，
-      仅适合单端测试，不表达两端通信语义。
-    """
-
-    def __init__(self, maxsize: int | None = None) -> None:
-        queue = _make_queue(maxsize)
-        closed = asyncio.Event()
-        # 自环：入站与出站是同一个队列，关闭标记也只有一份
-        self._outbound: asyncio.Queue[BaseModel] = queue
-        self._inbound: asyncio.Queue[BaseModel] = queue
-        self._closed = closed
-        self._peer_closed = closed
-
-    @classmethod
-    def create_pair(cls, maxsize: int | None = None) -> tuple['InProcessPipe', 'InProcessPipe']:
-        """创建共享同一双向通道的一对端点（方向相反、缓冲独立）。"""
-        to_first = _make_queue(maxsize)
-        to_second = _make_queue(maxsize)
-        first_closed = asyncio.Event()
-        second_closed = asyncio.Event()
-
-        first = cls._build(to_second, to_first, first_closed, second_closed)
-        second = cls._build(to_first, to_second, second_closed, first_closed)
-        return first, second
-
-    @classmethod
-    def _build(
-        cls,
-        outbound: asyncio.Queue[BaseModel],
-        inbound: asyncio.Queue[BaseModel],
-        closed: asyncio.Event,
-        peer_closed: asyncio.Event,
-    ) -> 'InProcessPipe':
-        """绕过 ``__init__`` 组装端点，使两个端点共享通道与关闭信号。"""
-        pipe: InProcessPipe = cls.__new__(cls)
-        pipe._outbound = outbound
-        pipe._inbound = inbound
-        pipe._closed = closed
-        pipe._peer_closed = peer_closed
-        return pipe
-
-    async def send(self, data: BaseModel) -> None:
+    async def send(self, data: PayloadType) -> None:
         """写入对端缓冲区；本端或对端已关闭时抛出 PipeClosedError。"""
-        if self._closed.is_set() or self._peer_closed.is_set():
+        if self._inbound_closed.is_set() or self._outbound_closed.is_set():
             raise PipeClosedError('Pipe is closed')
-        await self._outbound.put(data)
 
-    async def receive(self) -> BaseModel:
-        """从入站缓冲区读取；对端已关闭且缓冲区为空时抛出 PipeClosedError。"""
-        get_task: asyncio.Task[BaseModel] = asyncio.create_task(self._inbound.get())
-        wait_task: asyncio.Task[Literal[True]] = asyncio.create_task(self._peer_closed.wait())
-        done, _ = await asyncio.wait([get_task, wait_task], return_when=asyncio.FIRST_COMPLETED)
-
-        if get_task in done:
-            wait_task.cancel()
-            try:
-                await wait_task
-            except asyncio.CancelledError:
-                pass
-            data: BaseModel = get_task.result()
-            self._inbound.task_done()
-            return data
-
-        get_task.cancel()
+        put_task: asyncio.Task[None] = asyncio.create_task(self._outbound.put(data))
+        in_closed_task: asyncio.Task[bool] = asyncio.create_task(self._inbound_closed.wait())
+        out_closed_task: asyncio.Task[bool] = asyncio.create_task(self._outbound_closed.wait())
+        tasks: tuple[asyncio.Task[Any], ...] = (put_task, in_closed_task, out_closed_task)
         try:
-            await get_task
-        except asyncio.CancelledError:
-            pass
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        except BaseException:
+            await cancel_tasks(tasks)
+            raise
+
+        await cancel_tasks(pending)
+        if put_task in done:
+            return
         raise PipeClosedError('Pipe is closed')
 
+    async def receive(self) -> PayloadType:
+        """从入站缓冲区读取；本端或对端已关闭且缓冲区耗尽时抛出 PipeClosedError。"""
+        while True:
+            try:
+                data: PayloadType = self._inbound.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            else:
+                self._inbound.task_done()
+                return data
+
+            if self._inbound_closed.is_set() or self._outbound_closed.is_set():
+                raise PipeClosedError('Pipe is closed')
+
+            get_task: asyncio.Task[PayloadType] = asyncio.create_task(self._inbound.get())
+            in_closed_task: asyncio.Task[bool] = asyncio.create_task(self._inbound_closed.wait())
+            out_closed_task: asyncio.Task[bool] = asyncio.create_task(self._outbound_closed.wait())
+            tasks: tuple[asyncio.Task[Any], ...] = (get_task, in_closed_task, out_closed_task)
+            try:
+                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            except BaseException:
+                await cancel_tasks(tasks)
+                raise
+
+            await cancel_tasks(pending)
+
+            if get_task in done:
+                data = get_task.result()
+                self._inbound.task_done()
+                return data
+            # 关闭事件先到：回到循环顶部，先排空缓冲区再抛错。
+
     async def open(self) -> None:
-        """打开端点。若本端曾关闭，重置关闭标记并清空残留的入站数据。"""
-        if self._closed.is_set():
-            self._closed.clear()
-            while not self._inbound.empty():
+        """重置本端关闭标记，并清空残留的入站数据。"""
+        if self._outbound_closed.is_set():
+            self._outbound_closed.clear()
+            while True:
                 try:
                     self._inbound.get_nowait()
-                    self._inbound.task_done()
                 except asyncio.QueueEmpty:
                     break
+                self._inbound.task_done()
 
     async def close(self) -> None:
-        """关闭本端：通知对端「不会再有新数据」，并禁止后续写入。"""
-        if not self._closed.is_set():
-            self._closed.set()
+        """关闭本端：通知对端「不会再有新数据」，并禁止后续读写。"""
+        self._outbound_closed.set()
 
 
-class InProcessPipeAllocator(PipeAllocator):
+def create_pair[PayloadType: BaseModel](
+    pipe_type: type[InProcessPipe[PayloadType]],
+    maxsize: int | None = None,
+) -> tuple[InProcessPipe[PayloadType], InProcessPipe[PayloadType]]:
+    """创建共享同一双向通道的一对端点（方向相反、缓冲独立）。"""
+    to_first: asyncio.Queue[PayloadType] = asyncio.Queue(maxsize=maxsize or 0)
+    to_second: asyncio.Queue[PayloadType] = asyncio.Queue(maxsize=maxsize or 0)
+    first_closed = asyncio.Event()
+    second_closed = asyncio.Event()
+
+    first = pipe_type(to_first, to_second, second_closed, first_closed)
+    second = pipe_type(to_second, to_first, first_closed, second_closed)
+    return first, second
+
+
+class InProcessPipeAllocator[PayloadType: BaseModel = BaseModel](PipeAllocator[PayloadType]):
     """进程内管道分配器：``allocate()`` 创建共享同一双向通道的端点对。
 
     分配方端点由 ``allocate()`` 直接返回；借用方端点通过 ``checkout()`` 领取、
@@ -118,22 +117,23 @@ class InProcessPipeAllocator(PipeAllocator):
 
     def __init__(
         self,
-        pipe_type: type[InProcessPipe] = InProcessPipe,
+        pipe_type: type[InProcessPipe[PayloadType]] = InProcessPipe,
     ) -> None:
-        self._local_pipes: dict[str, InProcessPipe] = {}
-        self._peer_pipes: dict[str, InProcessPipe] = {}
-        self._pipe_type = pipe_type
+        self._local_pipes: dict[str, InProcessPipe[PayloadType]] = {}
+        self._peer_pipes: dict[str, InProcessPipe[PayloadType]] = {}
+        self._active: dict[str, InProcessPipe[PayloadType]] = {}
+        self._pipe_type: type[InProcessPipe[PayloadType]] = pipe_type
 
     async def allocate(
         self,
         **kwargs: Any,
-    ) -> tuple[str, Pipe]:
+    ) -> tuple[str, Pipe[PayloadType]]:
         """创建一对端点，返回 ``(pipe_id, 分配方本端端点)``。"""
         pipe_id: str = uuid.uuid4().hex
         if pipe_id in self._local_pipes:
             raise ValueError(f'Pipe with id {pipe_id} already exists')
 
-        local_pipe, peer_pipe = self._pipe_type.create_pair(**kwargs)
+        local_pipe, peer_pipe = create_pair(self._pipe_type, **kwargs)
         self._local_pipes[pipe_id] = local_pipe
         self._peer_pipes[pipe_id] = peer_pipe
         return pipe_id, local_pipe
@@ -142,16 +142,23 @@ class InProcessPipeAllocator(PipeAllocator):
         """关闭两端端点并注销；重复调用无副作用。"""
         local_pipe = self._local_pipes.pop(pipe_id, None)
         peer_pipe = self._peer_pipes.pop(pipe_id, None)
-        for pipe in (local_pipe, peer_pipe):
+        active_pipe = self._active.pop(pipe_id, None)
+        for pipe in (local_pipe, peer_pipe, active_pipe):
             if pipe is not None:
                 await pipe.close()
 
-    async def checkout(self, pipe_id: str) -> Pipe | None:
-        """返回借用方（服务端）端点，不存在时返回 None。"""
-        return self._peer_pipes.get(pipe_id)
+    async def checkout(self, pipe_id: str) -> Pipe[PayloadType] | None:
+        """返回借用方（服务端）端点；已领取或不存在时返回 None。"""
+        pipe = self._peer_pipes.pop(pipe_id, None)
+        if pipe is None:
+            return None
+        self._active[pipe_id] = pipe
+        return pipe
 
     async def checkin(self, pipe_id: str) -> None:
         """归还借用方端点；不销毁分配方资源，重复调用无副作用。"""
-        peer_pipe = self._peer_pipes.pop(pipe_id, None)
+        peer_pipe = self._active.pop(pipe_id, None)
+        if peer_pipe is None:
+            peer_pipe = self._peer_pipes.pop(pipe_id, None)
         if peer_pipe is not None:
             await peer_pipe.close()

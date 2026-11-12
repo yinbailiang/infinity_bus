@@ -20,22 +20,23 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def open_pipe(
+async def open_pipe[PayloadType: BaseModel](
     bus_proxy: EventBus.Proxy,
     req_event: str,
     resp_event: str,
-    allocator: PipeAllocator,
+    allocator: PipeAllocator[PayloadType],
+    *,
     handshake_timeout: float = 5.0,
     session_id: str | None = None,
-    pipe_kargs: dict[str, Any] | None = None,
-) -> AsyncGenerator[Pipe, None]:
+    pipe_kwargs: dict[str, Any] | None = None,
+) -> AsyncGenerator[Pipe[PayloadType], None]:
     """客户端管道握手上下文管理器。
 
     分配管道 → 发送握手请求 → 等待握手响应 → yield 已就绪的 Pipe。
     """
     session_id = session_id or uuid.uuid4().hex
 
-    pipe_id, pipe = await allocator.allocate(**(pipe_kargs or {}))
+    pipe_id, pipe = await allocator.allocate(**(pipe_kwargs or {}))
     logger.debug(f'Pipe allocated with id={pipe_id}')
 
     try:
@@ -74,14 +75,14 @@ async def open_pipe(
 
 
 @asynccontextmanager
-async def expect_pipe(
+async def expect_pipe[PayloadType: BaseModel](
     bus_proxy: EventBus.Proxy,
     req_event: str,
     resp_event: str,
-    allocator: PipeAllocator,
+    allocator: PipeAllocator[PayloadType],
     session_id: str | None = None,
     timeout: float = 5.0,
-) -> AsyncGenerator[Pipe, None]:
+) -> AsyncGenerator[Pipe[PayloadType], None]:
     """等待一个管道连接请求，返回已建立的 Pipe 实例。"""
 
     def request_filter(event: Event) -> bool:
@@ -103,7 +104,7 @@ async def expect_pipe(
         raise PipeHandshakeError('Invalid request payload type')
 
     pipe_id: str = req_data.pipe_id
-    pipe: Pipe | None = await allocator.checkout(pipe_id)
+    pipe: Pipe[PayloadType] | None = await allocator.checkout(pipe_id)
     if pipe is None:
         error_resp = PipeLinkedResponse(
             session_id=req_data.session_id,
@@ -111,14 +112,21 @@ async def expect_pipe(
             success=False,
             error_msg=f'Pipe {pipe_id} not found',
         )
-        await bus_proxy.publish(resp_event, error_resp.model_dump())
+        try:
+            await bus_proxy.publish(resp_event, error_resp.model_dump())
+        except Exception:
+            logger.exception('发送管道握手失败响应失败')
         raise PipeHandshakeError(f'Pipe {pipe_id} not found')
 
     success_resp = PipeLinkedResponse(session_id=req_data.session_id, request_id=req_data.request_id, success=True)
-    await bus_proxy.publish(resp_event, success_resp.model_dump())
-    logger.debug(f'Pipe accepted: {pipe_id}')
 
     try:
+        try:
+            await bus_proxy.publish(resp_event, success_resp.model_dump())
+        except Exception as e:
+            raise PipeHandshakeError(f'Handshake failed: {e}') from e
+        logger.debug(f'Pipe accepted: {pipe_id}')
+
         async with pipe:
             yield pipe
     finally:
