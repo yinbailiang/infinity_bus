@@ -18,7 +18,7 @@ Advanced patterns built on top of the core event bus. These are optional — imp
 | `handler` | Function→Handler | Quickly define event handlers, sync/async auto-adapt, signature validation | [simple_handler.md](simple_handler.md) |
 | `expect` | One-shot Listener | Wait for specific events, test assertions, low-level wait logic | [expect.md](expect.md) |
 | `request` | Request-Response (RPC) | Sync-style async calls, inter-service communication | [request.md](request.md) |
-| `pipe` | Bidirectional Pipe | Streaming data exchange, long-connection simulation, persistent bidirectional flow | [pipe.md](pipe.md) |
+| `pipe` | Bidirectional Pipe | Streaming data exchange, long-connection simulation, persistent bidirectional flow | [pipe.md](pipe/pipe.md) |
 | `register` | Bulk Registration + DI | Large project modular organization, deferred registration, avoid circular imports | [register.md](register.md) |
 | [handlers/](handlers/handlers.md) | Handler Template Collection | Mailbox pattern (serial, backpressure) + service handler (RPC server side) | [Handlers Overview](handlers/handlers.md) |
 | `idempotency` | Idempotency (injected dedup) | at-least-once dedup, cross-restart strong idempotency | [idempotency.md](idempotency.md) |
@@ -208,7 +208,7 @@ async with open_pipe(pipe_id="my_pipe") as pipe:
     reply = await pipe.receive()
 ```
 
-See [pipe.md](pipe.md) for allocators and multi-process pipes.
+See [pipe](pipe/pipe.md) for allocators and multi-process pipes.
 
 ## register
 

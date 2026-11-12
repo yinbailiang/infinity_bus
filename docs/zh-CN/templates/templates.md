@@ -17,7 +17,7 @@
 | `handler` | 函数→处理器 | 快速定义事件处理器、同步/异步函数自动适配、签名校验 | [simple_handler.md](simple_handler.md) |
 | `expect` | 一次性监听 | 等待特定事件、测试断言、底层等待逻辑 | [expect.md](expect.md) |
 | `request` | 请求-响应 (RPC) | 同步风格的异步调用、服务间通信 | [request.md](request.md) |
-| `pipe` | 双向管道 | 流式数据交换、长连接模拟、持久化双向流 | [pipe.md](pipe.md) |
+| `pipe` | 双向管道 | 流式数据交换、长连接模拟、持久化双向流 | [pipe.md](pipe/pipe.md) |
 | `register` | 批量注册 + 依赖注入 | 大型项目模块化组织、延迟注册、避免循环导入 | [register.md](register.md) |
 | [handlers/](handlers/handlers.md) | 处理器模板集合 | 邮箱模式（串行消费、背压）+ 服务处理器（RPC 服务端） | [handlers 总览](handlers/handlers.md) |
 | `idempotency` | 幂等（注入去重） | at-least-once 重复投递去重、跨重启强幂等 | [idempotency.md](idempotency.md) |
@@ -204,7 +204,7 @@ async with open_pipe(pipe_id="my_pipe") as pipe:
     reply = await pipe.receive()
 ```
 
-详见 [pipe.md](pipe.md) 了解分配器和多进程管道。
+详见 [pipe](pipe/pipe.md) 了解分配器和多进程管道。
 
 ## register
 
